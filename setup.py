@@ -32,7 +32,7 @@ def version(path):
 # Package meta-data.
 NAME = "ross-report"
 DESCRIPTION = "ross-Report"
-URL = "https://github.com/ross-rotordynamics/ross"
+URL = "https://github.com/ross-rotordynamics/ross-report"
 EMAIL = "raphaelts@gmail.com"
 AUTHOR = "ROSS developers"
 REQUIRES_PYTHON = ">=3.6.0"
