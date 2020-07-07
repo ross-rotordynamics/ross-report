@@ -1,10 +1,11 @@
 from pathlib import Path
+import report
 import base64 as b64
 from plotly.graph_objs import Figure
 
 
 class CSS:
-    def __init__(self, path):
+    def __init__(self, path=Path(report.__file__).parent/"style.css"):
         self.path = Path(path)
 
     def __str__(self):
