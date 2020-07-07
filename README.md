@@ -2,7 +2,7 @@
 This package aims to build a report for [ROSS](https://github.com/ross-rotordynamics/ross), a rotordynamics python package.
 
 ## Quick start to graphics submodule
-In this first example we're going to see how to construct a simple hello_world.html with some text and an Plotly Figure.
+In this first example we're going to see how to construct a simple `hello_world.html` with some text and an Plotly Figure.
 ```Python
 from report.graphics import *
 import plotly.graph_objects as go
