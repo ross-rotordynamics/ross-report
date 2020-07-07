@@ -122,7 +122,7 @@ class Layout:
     """Report Layout
     """
 
-    def __init__(self, css=None, pages=None):
+    def __init__(self, css=CSS(), pages=None):
         assert (
             isinstance(pages, list) or isinstance(pages, Page) or pages is None
         ), "pages argument must be either a Page or a list of Pages."
@@ -131,7 +131,7 @@ class Layout:
                 assert isinstance(page, Page), "All items in page must be Pages."
         self.pages = pages
 
-        assert isinstance(css, CSS) or css is None, "css must be an CSS object."
+        assert isinstance(css, CSS), "css must be an CSS object."
         self.css = css
 
     def __repr__(self):
