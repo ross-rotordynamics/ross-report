@@ -836,9 +836,9 @@ class Report:
             "Amplification factor": [],
             "Separation margin - ACTUAL": [],
             "Separation margin - REQUIRED": [],
-            "Unbalance station(s)": [nodes] * 3,
-            "Unbalance weight(s)": [force] * 3,
-            "Unbalance phase(s)": [phase] * 3,
+            "Unbalance station(s)": [nodes],
+            "Unbalance weight(s)": [force],
+            "Unbalance phase(s)": [phase],
         }
 
         response = self.rotor.run_unbalance_response(nodes, force, phase, freq_range)
