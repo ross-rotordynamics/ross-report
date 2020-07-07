@@ -2,6 +2,10 @@
 This package aims to build a report for [ROSS](https://github.com/ross-rotordynamics/ross), a rotordynamics python package.
 
 ## Quick start to graphics submodule
+The ross-report's structure is very simple, in the highest level we have an object called Layout, which constructs the whole html page.  
+Layout is composed of Pages which is composed of Content objects (like Text or PlotlyFigure), to arrange all the components on the html version you can simply put them in order.
+For a static PDF version of the report you can use `CTRL + P` on a browser like [chrome](https://www.google.com/intl/pt-BR/chrome/).
+
 In this first example we're going to see how to construct a simple `hello_world.html` with some text and an Plotly Figure.
 ```Python
 from report.graphics import *
