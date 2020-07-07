@@ -132,3 +132,4 @@ with open("report.html", "w") as f:
     f.write(html)
 
 ``` 
+The `report.html` file should look like [this](https://raw.githack.com/ross-rotordynamics/ross-report/master/examples/report.html).
