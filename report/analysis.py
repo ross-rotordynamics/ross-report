@@ -357,7 +357,7 @@ class Report:
 
         return fig
 
-    def static_forces(self):
+    def _static_forces(self):
         """Calculate the bearing reaction forces.
 
         Returns
@@ -369,7 +369,7 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> report.static_forces()
+        >>> report._static_forces()
         array([44.09320349, 44.09320349])
         """
         # get reaction forces on bearings
@@ -379,7 +379,7 @@ class Report:
 
         return Fb
 
-    def unbalance_forces(self, mode):
+    def _unbalance_forces(self, mode):
         """Calculate the unbalance forces.
 
         The unbalance forces are calculated base on the rotor type:
@@ -402,32 +402,35 @@ class Report:
 
         Returns
         -------
-        U : list
+        force : list
             Unbalancing forces.
 
         Example
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> report.unbalance_forces(mode=0)
-        [58.641354289961676]
+        >>> report._unbalance_forces(mode=0)
+        array([0.04479869])
         """
+        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
+            N = self.config.rotor_properties.rotor_speeds.max_speed
+        elif self.config.rotor_properties.rotor_speeds.unit == "rad/s":
+            N = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
+
         if mode > 3:
             raise ValueError(
                 "This module calculates only the response for the first "
                 "two backward and forward modes. "
             )
 
-        N = 60 * self.maxspeed / (2 * np.pi)
-
         # get reaction forces on bearings
         if self.rotor_type == "between_bearings":
-            Fb = self.static_forces()
+            Fb = self._static_forces()
             if mode == 0 or mode == 1:
-                U_force = [max(6350 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
+                force = [max(6350e-6 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
 
             if mode == 2 or mode == 3:
-                U_force = [max(6350 * f / N, 254e-6 * f) for f in Fb]
+                force = [max(6350e-6 * f / N, 254e-6 * f) for f in Fb]
 
         # get disk masses
         elif self.rotor_type == "single_overhung_l":
@@ -443,7 +446,7 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            U_force = [6350 * W3 / N]
+            force = [6350e-6 * W3 / N]
 
         elif self.rotor_type == "single_overhung_r":
             Wd = [
@@ -458,7 +461,7 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            U_force = [6350 * W3 / N]
+            force = [6350e-6 * W3 / N]
 
         elif self.rotor_type == "double_overhung":
             Wd_l = [
@@ -483,11 +486,11 @@ class Report:
             ]
             W3 = np.array([np.sum(Wd_l + Ws_l), np.sum(Wd_r + Ws_r)])
 
-            U_force = 6350 * W3 / N
+            force = 6350e-6 * W3 / N
 
-        self.U_force = U_force
+        force = 2 * np.array(force)
 
-        return U_force
+        return force
 
     def unbalance_response(self, mode, samples=201):
         """Evaluate the unbalance response for the rotor.
