@@ -162,35 +162,11 @@ class Report:
 
         return aux_rotor
 
-    def run(self, D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd, unit="m"):
-        """Run API report.
+    def run_report(self):
+        """Run rotordynamics report.
 
-        This method runs the API analysis and prepare the results to
+        This method runs the rotordynamics analyses and prepare the results to
         generate the PDF report.
-
-        Parameters
-        ----------
-        D: list
-            Impeller diameter, m (in.),
-            Blade pitch diameter, m (in.),
-        H: list
-            Minimum diffuser width per impeller, m (in.),
-            Effective blade height, m (in.),
-        HP: list
-            Rated power per stage/impeller, W (HP),
-        oper_speed: float
-            Operating speed, rpm,
-        RHO_ratio: list
-            Density ratio between the discharge gas density and the suction
-            gas density per impeller (RHO_discharge / RHO_suction),
-            kg/m3 (lbm/in.3),
-        RHOs: float
-            Suction gas density in the first stage, kg/m3 (lbm/in.3).
-        RHOd: float
-            Discharge gas density in the last stage, kg/m3 (lbm/in.3),
-        unit: str, optional
-            Adopted unit system. Options are "m" (meter) and "in" (inch)
-            Default is "m"
 
         Returns
         -------
@@ -215,15 +191,8 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> D = [0.35, 0.35]
-        >>> H = [0.08, 0.08]
-        >>> HP = [10000, 10000]
-        >>> RHO_ratio = [1.11, 1.14]
-        >>> RHOd = 30.45
-        >>> RHOs = 37.65
-        >>> oper_speed = 1000.0
-        >>> # to run the API report analysis, use:
-        >>> # report.run(D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd)
+        >>> # to run the report analysis, use:
+        >>> # report.run_report()
         """
         fig_ucs = []
         fig_mode_shape = []
@@ -235,32 +204,53 @@ class Report:
 
         rotor0 = self.rotor
 
-        for bearings in self.bearing_clearance_lists:
-            self.rotor = self.rotor_instance(rotor0, bearings)
+        # static analysis
+        static = rotor0.run_static()
+        fig_static = [
+            static.plot_free_body_diagram,
+            static.plot_deformation,
+            static.plot_shearing_force,
+            static.plot_bending_moment,
+        ]
+
+        for k, bearings in self.config.bearings.__dict__.items():
+            if not isinstance(bearings, Iterable):
+                raise ValueError(
+                    "{} option must be a list of bearing elements".format(k)
+                )
+
+            self.rotor = self._rotor_instance(rotor0, bearings)
 
             # undamped critical speed map
-            fig_ucs.append(self.plot_ucs(stiffness_range=self.bearing_stiffness_range))
+            fig_ucs.append(
+                self._plot_ucs(
+                    stiffness_range=self.config.plot_ucs.stiffness_range,
+                    num=self.config.plot_ucs.num,
+                    num_modes=self.config.plot_ucs.num_modes,
+                    synchronous=self.config.plot_ucs.synchronous,
+                )
+            )
 
-            for i, mode in enumerate([0, 2]):
+            for i, mode in enumerate([1, 3]):
                 # mode shape figures
-                fig_mode_shape.append(self.mode_shape(mode))
+                fig_mode_shape.append(self._mode_shape(mode))
 
                 # unbalance response figures and dataframe
-                fig, _dict = self.unbalance_response(mode)
+                fig, _dict = self._unbalance_response(mode)
                 fig_unbalance.append(fig)
                 df = pd.DataFrame(_dict).astype(object)
                 df_unbalance.append(df)
 
             # stability level 1 figures
-            figs = self.stability_level_1(D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd)
+            figs = self._stability_level_1()
             fig_a_lvl1.append(figs[0])
             fig_b_lvl1.append(figs[1])
 
             # stability level 2 dataframe
-            df_lvl2 = self.stability_level_2()
+            df_lvl2 = self._stability_level_2()
 
             # API summary tables
-            summaries.append(self.summary())
+            summaries.append(self._summary())
 
         df_unbalance = pd.concat(df_unbalance)
 
