@@ -1,20 +1,19 @@
 # fmt: off
+from collections.abc import Iterable
 from copy import copy, deepcopy
-from pathlib import Path
-
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+from plotly import express as px
+from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.interpolate import interp1d
 from scipy.signal import argrelextrema
 
-import ross
 from ross.bearing_seal_element import BearingElement, SealElement
 from ross.disk_element import DiskElement
 from ross.materials import steel
+from ross.plotly_theme import tableau_colors
 from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
 
@@ -22,7 +21,6 @@ from ross.shaft_element import ShaftElement
 
 # set Plotly palette of colors
 colors1 = px.colors.qualitative.Dark24
-colors2 = px.colors.sequential.PuBu
 
 __all__ = ["Report", "report_example"]
 
@@ -39,27 +37,8 @@ class Report:
     ----------
     rotor : object
         A rotor built from rotor_assembly.
-    speed_range : tuple
-        Tuple with (min, max) for speed range.
-    tripspeed : float
-        Machine trip speed.
-    bearing_stiffness_range : tuple, optional
-        Tuple with (start, end) bearing stiffness range.
-        Argument to calculate the Undamped Critical Speed Map.
-    bearing_clearance_lists : list of lists, optional
-        List with two bearing elements lists:
-            The first bearing list is set for minimum clearance.
-            The second bearing list it set for maximum clearance.
-    machine_type : str
-        Machine type analyzed. Options: compressor, turbine or axial_flow.
-        If other option is given, it will be treated as a compressor
-        Default is compressor
-    speed_units : str
-        String defining the unit for rotor speed.
-        Default is "rpm".
-    tag : str
-        String to name the rotor model
-        Default is the Rotor.tag attribute
+    config : object
+        An instance of class Config() with the analyses configurations.
 
     Attributes
     ----------
@@ -77,60 +56,14 @@ class Report:
     --------
     >>> import ross as rs
     >>> rotor = rs.rotor_example()
-    >>>
-    >>> # coefficients for minimum clearance
-    >>> stfx = [0.7e7, 0.8e7, 0.9e7, 1.0e7]
-    >>> damp = [2.0e3, 1.9e3, 1.8e3, 1.7e3]
-    >>> freq = [400, 800, 1200, 1600]
-    >>> bearing0 = rs.BearingElement(0, kxx=stfx, cxx=damp, frequency=freq)
-    >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
-    >>> min_clearance_brg = [bearing0, bearing1]
-    >>>
-    >>> # coefficients for maximum clearance
-    >>> stfx = [0.4e7, 0.5e7, 0.6e7, 0.7e7]
-    >>> damp = [2.8e3, 2.7e3, 2.6e3, 2.5e3]
-    >>> freq = [400, 800, 1200, 1600]
-    >>> bearing0 = rs.BearingElement(0, kxx=stfx, cxx=damp, frequency=freq)
-    >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
-    >>> max_clearance_brg = [bearing0, bearing1]
-    >>>
-    >>> bearings = [min_clearance_brg, max_clearance_brg]
-    >>> report = rs.Report(rotor=rotor,
-    ...                 speed_range=(400, 1000),
-    ...                 tripspeed=1200,
-    ...                 bearing_stiffness_range=(5,8),
-    ...                 bearing_clearance_lists=bearings,
-    ...                 speed_units="rad/s")
+    >>> config = rs.Config()
+    >>> report = rs.Report(rotor=rotor, config=config)
     >>> report.rotor_type
     'between_bearings'
     """
 
-    def __init__(
-        self,
-        rotor,
-        speed_range,
-        tripspeed,
-        bearing_stiffness_range=None,
-        bearing_clearance_lists=None,
-        machine_type="compressor",
-        speed_units="rpm",
-        tag=None,
-    ):
+    def __init__(self, rotor, config):
         self.rotor = rotor
-        self.speed_units = speed_units
-        self.speed_range = speed_range
-
-        if speed_units == "rpm":
-            self.minspeed = speed_range[0] * np.pi / 30
-            self.maxspeed = speed_range[1] * np.pi / 30
-            self.tripspeed = tripspeed * np.pi / 30
-        if speed_units == "rad/s":
-            self.minspeed = speed_range[0]
-            self.maxspeed = speed_range[1]
-            self.tripspeed = tripspeed
-
-        self.bearing_stiffness_range = bearing_stiffness_range
-        self.bearing_clearance_lists = bearing_clearance_lists
 
         # check if rotor is between bearings, single or double overhung
         # fmt: off
@@ -178,84 +111,21 @@ class Report:
         self.disk_nodes = disk_nodes
 
         machine_options = ["compressor", "turbine", "axial_flow"]
+        machine_type = config.rotor_properties.rotor_id.type
         if machine_type not in machine_options:
-            machine_type = "compressor"
-        self.machine_type = machine_type
+            raise ValueError(
+                "rotor_id.type is set to {}. Please choose between {}.".format(
+                    machine_type, machine_options
+                )
+            )
 
-        if tag is None:
-            self.tag = rotor.tag
-        else:
-            self.tag = tag
+        if config.rotor_properties.rotor_id.tag is None:
+            config.update_config(rotor_properties=dict(rotor_id=dict(tag=rotor.tag)))
 
-        # Multiplicative factor of the speed range - according to API 684
-        self.speed_factor = 1.25
+        self.tag = config.rotor_properties.rotor_id.tag
+        self.config = config
 
-        # list of attributes
-        self.Q0 = None
-        self.Qa = None
-        self.log_dec_a = None
-        self.CSR = None
-        self.Qratio = None
-        self.crit_speed = None
-        self.MCS = None
-        self.RHO_gas = None
-        self.condition = None
-        self.node_min = None
-        self.node_max = None
-        self.U_force = None
-
-    @classmethod
-    def from_saved_rotors(
-        cls,
-        path,
-        speed_range,
-        tripspeed,
-        bearing_stiffness_range=None,
-        bearing_clearance_lists=None,
-        machine_type="compressor",
-        speed_units="rpm",
-        tag=None,
-    ):
-        """Instantiate a rotor from a previously saved rotor model.
-
-        Parameters
-        ----------
-        path : str
-            File name
-        maxspeed : float
-            Maximum operation speed.
-        minspeed : float
-            Minimum operation speed.
-        tripspeed : float
-            Machine trip speed.
-        stiffness_range : tuple, optional
-            Tuple with (start, end) for stiffness range. Argument to calculate
-            the Undamped Critical Speed Map
-        machine_type : str
-            Machine type analyzed. Options: compressor, turbine or axial_flow.
-            If other option is given, it will be treated as a compressor
-            Default is compressor
-        speed_units : str
-            String defining the unit for rotor speed.
-            Default is "rpm".
-
-        Returns
-        -------
-        A Report object
-        """
-        rotor = Rotor.load(path)
-        return cls(
-            rotor,
-            speed_range,
-            tripspeed,
-            bearing_stiffness_range,
-            bearing_clearance_lists,
-            machine_type,
-            speed_units,
-            tag,
-        )
-
-    def rotor_instance(self, rotor, bearing_list):
+    def _rotor_instance(self, rotor, bearing_list):
         """Build an instance of an auxiliary rotor with different bearing clearances.
 
         Parameters
@@ -281,19 +151,14 @@ class Report:
         >>> bearings = [bearing0, bearing1]
         >>> rotor = rs.rotor_example()
         >>> report = rs.report_example()
-        >>> aux_rotor = report.rotor_instance(rotor, bearings)
+        >>> aux_rotor = report._rotor_instance(rotor, bearings)
         """
         sh_elm = rotor.shaft_elements
         dk_elm = rotor.disk_elements
         pm_elm = rotor.point_mass_elements
-        min_w = rotor.min_w
-        max_w = rotor.max_w
-        rated_w = rotor.rated_w
         tag = rotor.tag
 
-        aux_rotor = Rotor(
-            sh_elm, dk_elm, bearing_list, pm_elm, min_w, max_w, rated_w, tag
-        )
+        aux_rotor = Rotor(sh_elm, dk_elm, bearing_list, pm_elm, tag=tag)
 
         return aux_rotor
 
