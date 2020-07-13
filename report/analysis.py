@@ -492,7 +492,7 @@ class Report:
 
         return force
 
-    def unbalance_response(self, mode, samples=201):
+    def _unbalance_response(self, mode):
         """Evaluate the unbalance response for the rotor.
 
         This analysis takes the critical speeds of interest, calculates the
@@ -528,19 +528,29 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> fig, unbalance_dict = report.unbalance_response(mode=0)
+        >>> fig, unbalance_dict = report._unbalance_response(mode=0)
         """
-        maxspeed = self.maxspeed
-        minspeed = self.minspeed
-        freq_range = np.linspace(0, self.speed_factor * maxspeed, 201)
+        maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
+        minspeed = self.config.rotor_properties.rotor_speeds.min_speed
+        speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
+
+        freq_range = self.config.run_unbalance_response.frequency_range
+        modes = self.config.run_unbalance_response.modes
+        cluster_points = self.config.run_unbalance_response.cluster_points
+        num_modes = self.config.run_unbalance_response.num_modes
+        num_points = self.config.run_unbalance_response.num_points
+        rtol = self.config.run_unbalance_response.rtol
+
+        if freq_range is None and not cluster_points:
+            freq_range = np.linspace(0, speed_factor * maxspeed, 201)
 
         # returns de nodes where forces will be applied
-        self.mode_shape(mode)
+        self._mode_shape(mode)
         node_min = self.node_min
         node_max = self.node_max
         nodes = [int(node) for sub_nodes in [node_min, node_max] for node in sub_nodes]
 
-        force = self.unbalance_forces(mode)
+        _magnitude = self._unbalance_forces(mode)
 
         phase = []
         phase_angle = 0
@@ -548,194 +558,164 @@ class Report:
             phase.append(phase_angle)
             phase_angle += np.pi
 
-        unbalance_dict = {
-            "Mode": mode + 1,
-            "Frequency": [],
-            "Amplification factor": [],
-            "Separation margin - ACTUAL": [],
-            "Separation margin - REQUIRED": [],
-            "Unbalance station(s)": [nodes],
-            "Unbalance weight(s)": [force],
-            "Unbalance phase(s)": [phase],
-        }
+        # fmt: off
+        response = self.rotor.run_unbalance_response(
+            nodes, _magnitude, phase, freq_range, modes,
+            cluster_points, num_modes, num_points, rtol,
+        )
+        # fmt: on
 
-        response = self.rotor.run_unbalance_response(nodes, force, phase, freq_range)
         mag = response.magnitude
 
-        for node in nodes:
-            dof = 4 * node + 1
-            mag_plot = response.plot_magnitude(dof)
-            phs_plot = response.plot_phase(dof)
+        plot = make_subplots(
+            rows=2, cols=2, specs=[[{}, {"type": "polar", "rowspan": 2}], [{}, None]]
+        )
 
-        magnitude = mag[dof]
-        idx_max = argrelextrema(magnitude, np.greater)[0].tolist()
-        wn = freq_range[idx_max]
+        probe_nodes = self.config.run_unbalance_response.probes.node
+        probe_orien = self.config.run_unbalance_response.probes.orientation
+        unbalance_dict = {
+            "probe {}".format(i + 1): None for i in range(len(probe_nodes))
+        }
 
-        for i, peak in enumerate(magnitude[idx_max]):
-            peak_n = 0.707 * peak
-            peak_aux = np.linspace(peak_n, peak_n, len(freq_range))
+        k = 0
+        for n, o in zip(probe_nodes, probe_orien):
+            dof = self.rotor.number_dof * n + 1
+            fig = response.plot(dof)
 
-            idx = np.argwhere(np.diff(np.sign(peak_aux - magnitude))).flatten()
-            idx = np.sort(np.append(idx, idx_max[i]))
+            for j, data in enumerate(fig["data"]):
+                data.line.color = list(tableau_colors.keys())[k]
+                data.marker.color = list(tableau_colors.keys())[k]
+                data.name = "Probe Node {}".format(n)
+                data.legendgroup = "Probe Node {}".format(n)
+                data.showlegend = True if j == 0 else False
+                plot.add_trace(data)
 
-            # if speed range is not long enough to catch the magnitudes
-            try:
-                idx_aux = [
-                    list(idx).index(idx_max[i]) - 1,
-                    list(idx).index(idx_max[i]) + 1,
-                ]
-                idx = idx[idx_aux]
-            except IndexError:
-                idx = [list(idx).index(idx_max[i]) - 1, len(freq_range) - 1]
+            plot.update_layout(fig.layout)
 
-            # Amplification Factor (AF) - API684 - SP6.8.2.1
-            AF = wn[i] / (freq_range[idx[1]] - freq_range[idx[0]])
+            _dict = {
+                "Probe node": [n],
+                "Probe orientation": [o],
+                "Critical frequencies": [],
+                "Amplification factor": [],
+                "Separation margin - ACTUAL": [],
+                "Separation margin - REQUIRED": [],
+                "Unbalance station(s)": nodes,
+                "Unbalance weight(s)": _magnitude.tolist(),
+                "Unbalance phase(s)": phase,
+            }
 
-            # Separation Margin (SM) - API684 - SP6.8.2.10
-            if AF > 2.5 and wn[i] < minspeed:
-                SM = min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100
-                SMspeed = wn[i] * (1 + SM)
-                SM_ref = (minspeed - wn[i]) / wn[i]
+            magnitude = mag[dof]
+            idx_max = argrelextrema(magnitude, np.greater)[0].tolist()
+            wn = freq_range[idx_max]
 
-                hovertemplate = (
-                    f"<b>Critical Speed: {wn[i]:.2f}<b><br>"
-                    + f"<b>Speed at 0.707 x amplitude peak: {SMspeed:.2f}<b><br>"
-                )
-                mag_plot.add_trace(
-                    go.Scatter(
-                        x=[wn[i], SMspeed, SMspeed, wn[i], wn[i]],
-                        y=[0, 0, max(magnitude[idx_max]), max(magnitude[idx_max]), 0],
-                        text=hovertemplate,
-                        mode="lines",
-                        opacity=0.3,
-                        fill="toself",
-                        fillcolor=colors1[3],
-                        line=dict(width=1.5, color=colors1[3]),
-                        showlegend=True if i == 0 else False,
-                        name="Separation Margin",
-                        legendgroup="Separation Margin",
-                        hoveron="points+fills",
-                        hoverinfo="text",
-                        hovertemplate=hovertemplate,
-                        hoverlabel=dict(bgcolor=colors1[3]),
-                    )
-                )
+            for i, peak in enumerate(magnitude[idx_max]):
+                peak_n = 0.707 * peak
+                peak_aux = np.linspace(peak_n, peak_n, len(freq_range))
 
-            elif AF > 2.5 and wn[i] > maxspeed:
-                SM = min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100
-                SMspeed = wn[i] * (1 - SM)
-                SM_ref = (wn[i] - maxspeed) / maxspeed
+                idx = np.argwhere(np.diff(np.sign(peak_aux - magnitude))).flatten()
+                idx = np.sort(np.append(idx, idx_max[i]))
 
-                hovertemplate = (
-                    f"<b>Critical Speed: {wn[i]:.2f}<b><br>"
-                    + f"<b>Speed at 0.707 x amplitude peak: {SMspeed:.2f}<b><br>"
-                )
-                mag_plot.add_trace(
-                    go.Scatter(
-                        x=[SMspeed, wn[i], wn[i], SMspeed, SMspeed],
-                        y=[0, 0, max(magnitude[idx_max]), max(magnitude[idx_max]), 0],
-                        text=hovertemplate,
-                        mode="lines",
-                        opacity=0.3,
-                        fill="toself",
-                        fillcolor=colors1[3],
-                        line=dict(width=1.5, color=colors1[3]),
-                        showlegend=True if i == 0 else False,
-                        name="Separation Margin",
-                        legendgroup="Separation Margin",
-                        hoveron="points+fills",
-                        hoverinfo="text",
-                        hovertemplate=hovertemplate,
-                        hoverlabel=dict(bgcolor=colors1[3]),
-                    )
-                )
+                # if speed range is not long enough to catch the magnitudes
+                try:
+                    idx_aux = [
+                        list(idx).index(idx_max[i]) - 1,
+                        list(idx).index(idx_max[i]) + 1,
+                    ]
+                    idx = idx[idx_aux]
+                except IndexError:
+                    idx = [list(idx).index(idx_max[i]) - 1, len(freq_range) - 1]
 
-            else:
-                SM = None
-                SM_ref = None
-                SMspeed = None
+                # Amplification Factor (AF) - API684 - SP6.8.2.1
+                AF = wn[i] / (freq_range[idx[1]] - freq_range[idx[0]])
 
-            unbalance_dict["Amplification factor"].append(AF)
-            unbalance_dict["Separation margin - ACTUAL"].append(SM)
-            unbalance_dict["Separation margin - REQUIRED"].append(SM_ref)
-            unbalance_dict["Frequency"].append(wn[i])
+                # Separation Margin (SM) - API684 - SP6.8.2.10
+                if AF > 2.5 and wn[i] < minspeed:
+                    SM = min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100
+                    SMspeed = wn[i] * (1 + SM)
+                    SM_ref = (minspeed - wn[i]) / wn[i]
 
-        # amplitude limit in micrometers (A1) - API684 - SP6.8.2.11
-        A1 = 25.4 * np.sqrt(12000 / (30 * maxspeed / np.pi))
+                elif AF > 2.5 and wn[i] > maxspeed:
+                    SM = min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100
+                    SMspeed = wn[i] * (1 - SM)
+                    SM_ref = (wn[i] - maxspeed) / maxspeed
 
-        Amax = max(mag[dof])
+                else:
+                    SM = None
+                    SM_ref = None
+                    SMspeed = None
 
-        # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
-        Scc = max(A1 / Amax, 0.5)
-        Scc = min(Scc, 6.0)
+                _dict["Amplification factor"].append(AF)
+                _dict["Separation margin - ACTUAL"].append(SM)
+                _dict["Separation margin - REQUIRED"].append(SM_ref)
+                _dict["Critical frequencies"].append(wn[i])
 
-        mag_plot.add_trace(
-            go.Scatter(
-                x=[minspeed, maxspeed, maxspeed, minspeed, minspeed],
-                y=[0, 0, max(mag[dof]), max(mag[dof]), 0],
-                text="Operation Speed Range",
-                mode="lines",
-                opacity=0.3,
-                fill="toself",
-                fillcolor=colors1[2],
-                line=dict(width=1.5, color=colors1[2]),
-                name="Operation Speed Range",
-                legendgroup="Operation Speed Range",
-                hoveron="points+fills",
-                hoverinfo="text",
-                hoverlabel=dict(bgcolor=colors1[2]),
+            unbalance_dict["probe {}".format(k + 1)] = _dict
+
+            # amplitude limit (A1) - API684 - SP6.8.2.11
+            A1 = 25.4 * np.sqrt(12000 / (30 * maxspeed / np.pi)) * 1e-6
+
+            Amax = max(mag[dof])
+
+            # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
+            Scc = max(A1 / Amax, 0.5)
+            Scc = min(Scc, 6.0)
+
+            customdata = [minspeed, maxspeed]
+            plot.add_trace(
+                go.Scatter(
+                    x=[minspeed, maxspeed, maxspeed, minspeed, minspeed],
+                    y=[0, 0, max(mag[dof]), max(mag[dof]), 0],
+                    customdata=customdata * 5,
+                    mode="lines",
+                    opacity=0.3,
+                    fill="toself",
+                    fillcolor=tableau_colors["green"],
+                    line=dict(width=1.5, color=tableau_colors["green"]),
+                    name="Operation Speed Range",
+                    legendgroup="Operation Speed Range",
+                    hoveron="points+fills",
+                    showlegend=True if i == 0 else False,
+                    hoverlabel=dict(bgcolor=tableau_colors["green"]),
+                    hovertemplate=(
+                        f"<b>min. speed: {customdata[0]:.1f}</b><br>"
+                        + f"<b>max. speed: {customdata[1]:.1f}</b>"
+                    ),
+                ),
+                row=1,
+                col=1,
             )
-        )
-        mag_plot.add_trace(
-            go.Scatter(
-                x=[minspeed, maxspeed],
-                y=[A1, A1],
-                mode="lines",
-                line=dict(width=2.0, color=colors1[5], dash="dashdot"),
-                name="Av1 - Mechanical test vibration limit",
-                hoverinfo="none",
+            plot.add_trace(
+                go.Scatter(
+                    x=[minspeed, maxspeed],
+                    y=[A1, A1],
+                    mode="lines",
+                    line=dict(width=2.0, color="black", dash="dashdot"),
+                    name="Av1 - Mechanical test vibration limit",
+                    showlegend=True if i == 0 else False,
+                    hoverinfo="none",
+                ),
+                row=1,
+                col=1,
             )
-        )
-        mag_plot.add_annotation(
-            x=(minspeed + maxspeed) / 2,
-            y=A1,
-            axref="x",
-            ayref="y",
-            xshift=0,
-            yshift=10,
-            text="<b>Av1</b>",
-            font=dict(size=18),
-            showarrow=False,
-        )
-        mag_plot["data"][0]["line"] = dict(width=4.0, color=colors1[5])
-        phs_plot["data"][0]["line"] = dict(width=4.0, color=colors1[5])
+            plot.add_annotation(
+                x=(minspeed + maxspeed) / 2,
+                y=A1,
+                axref="x",
+                ayref="y",
+                xshift=0,
+                yshift=10,
+                text="<b>Av1</b>",
+                font=dict(size=18),
+                showarrow=False,
+                row=1,
+                col=1,
+            )
 
-        subplots = make_subplots(rows=2, cols=1)
-        for data in mag_plot["data"]:
-            subplots.add_trace(data, row=1, col=1)
-        for data in phs_plot["data"]:
-            subplots.add_trace(data, row=2, col=1)
+            k += 1
 
-        subplots.update_xaxes(mag_plot.layout.xaxis, row=1, col=1)
-        subplots.update_yaxes(mag_plot.layout.yaxis, row=1, col=1)
-        subplots.update_xaxes(phs_plot.layout.xaxis, row=2, col=1)
-        subplots.update_yaxes(phs_plot.layout.yaxis, row=2, col=1)
-        subplots.update_layout(
-            width=1800,
-            height=900,
-            plot_bgcolor="white",
-            hoverlabel_align="right",
-            legend=dict(
-                itemsizing="constant",
-                bgcolor="white",
-                borderwidth=2,
-                font=dict(size=14),
-            ),
-        )
+        return plot, unbalance_dict
 
-        return subplots, unbalance_dict
-
-    def mode_shape(self, mode):
+    def _mode_shape(self, mode):
         """Evaluate the mode shapes for the rotor.
 
         This analysis presents the vibration mode for each critical speed.
@@ -764,7 +744,7 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> fig = report.mode_shape(mode=0)
+        >>> fig = report._mode_shape(mode=0)
         >>> report.node_min
         array([], dtype=float64)
         >>> report.node_max
@@ -773,8 +753,9 @@ class Report:
         nodes_pos = self.rotor.nodes_pos
         df_bearings = self.rotor.df_bearings
         df_disks = self.rotor.df_disks
+        speed = self.config.rotor_properties.rotor_speeds.oper_speed
 
-        modal = self.rotor.run_modal(speed=self.maxspeed)
+        modal = self.rotor.run_modal(speed=speed)
         xn, yn, zn, xc, yc, zc_pos, nn = modal.calc_mode_shape(mode=mode)
 
         # reduce 3D view to 2D view
@@ -942,7 +923,7 @@ class Report:
             ),
         )
 
-        return fig
+        return fig              
 
     def stability_level_1(self, D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd, unit="m"):
         """Stability analysis level 1.
