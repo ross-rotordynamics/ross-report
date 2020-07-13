@@ -330,20 +330,12 @@ class Report:
 
         return {"figs": figs, "html_figs": html_figs}
 
-    def plot_ucs(self, stiffness_range=None, num=20):
+    def _plot_ucs(self):
         """Plot undamped critical speed map.
 
         This method will plot the undamped critical speed map for a given range
         of stiffness values. If the range is not provided, the bearing
         stiffness at rated speed will be used to create a range.
-
-        Parameters
-        ----------
-        stiffness_range : tuple, optional
-            Tuple with (start, end) for stiffness range.
-        num : int
-            Number of steps in the range.
-            Default is 20.
 
         Returns
         -------
@@ -354,145 +346,13 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> fig = report.plot_ucs(stiffness_range=(5, 8))
+        >>> fig = report._plot_ucs()
         """
-        if stiffness_range is None:
-            if self.rotor.rated_w is not None:
-                bearing = self.rotor.bearing_elements[0]
-                k = bearing.kxx.interpolated(self.rotor.rated_w)
-                k = int(np.log10(k))
-                stiffness_range = (k - 3, k + 3)
-            else:
-                stiffness_range = (6, 11)
-
-        stiffness_log = np.logspace(*stiffness_range, num=num)
-        rotor_wn = np.zeros((4, len(stiffness_log)))
-
-        bearings_elements = []  # exclude the seals
-        for bearing in self.rotor.bearing_elements:
-            if not isinstance(bearing, SealElement):
-                bearings_elements.append(bearing)
-
-        for i, k in enumerate(stiffness_log):
-            bearings = [BearingElement(b.n, kxx=k, cxx=0) for b in bearings_elements]
-            rotor = self.rotor.__class__(
-                self.rotor.shaft_elements, self.rotor.disk_elements, bearings
-            )
-            modal = rotor.run_modal(speed=0, num_modes=16)
-            rotor_wn[:, i] = modal.wn[:8:2]
-
-        bearing0 = bearings_elements[0]
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=bearing0.kxx.interpolated(bearing0.frequency),
-                y=bearing0.frequency,
-                mode="markers",
-                marker=dict(size=10, symbol="circle", color="#888844"),
-                name="Kxx",
-                hovertemplate=("Kxx: %{x:.2e}<br>" + "Frequency: %{y:.2f}"),
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=bearing0.kyy.interpolated(bearing0.frequency),
-                y=bearing0.frequency,
-                mode="markers",
-                marker=dict(size=10, symbol="square", color="#888844"),
-                name="Kyy",
-                hovertemplate=("Kyy: %{x:.2e}<br>" + "Frequency: %{y:.2f}"),
-            )
-        )
-
-        # Speeds References
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.maxspeed] * num,
-                mode="lines",
-                line=dict(dash="dot", width=4, color=colors2[8]),
-                name="MCS Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.minspeed] * num,
-                mode="lines",
-                line=dict(dash="dash", width=4, color=colors2[8]),
-                name="MOS Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.tripspeed] * num,
-                mode="lines",
-                line=dict(dash="dashdot", width=4, color=colors2[8]),
-                name="Trip Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.speed_factor * self.tripspeed] * num,
-                mode="lines",
-                line=dict(dash="longdash", width=4, color=colors2[8]),
-                name="{}% Trip Speed".format(100 * self.speed_factor),
-                hoverinfo="none",
-            )
-        )
-        for j in range(rotor_wn.T.shape[1]):
-            fig.add_trace(
-                go.Scatter(
-                    x=stiffness_log,
-                    y=np.transpose(rotor_wn.T)[j],
-                    mode="lines",
-                    line=dict(width=4, color=colors1[j]),
-                    hoverinfo="none",
-                    showlegend=False,
-                )
-            )
-        fig.update_xaxes(
-            title_text="<b>Bearing Stiffness</b>",
-            title_font=dict(size=16),
-            tickfont=dict(size=14),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-            type="log",
-            exponentformat="power",
-        )
-        fig.update_yaxes(
-            title_text="<b>Critical Speed</b>",
-            title_font=dict(size=16),
-            tickfont=dict(size=14),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-            type="log",
-            exponentformat="power",
-        )
-        fig.update_layout(
-            width=800,
-            height=600,
-            plot_bgcolor="white",
-            legend=dict(
-                font=dict(family="sans-serif", size=14),
-                bgcolor="white",
-                bordercolor="black",
-                borderwidth=2,
-            ),
-            title=dict(text="<b>Undamped Critical Speed Map</b>", font=dict(size=16)),
+        fig = self.rotor.plot_ucs(
+            stiffness_range=self.config.plot_ucs.stiffness_range,
+            num_modes=self.config.plot_ucs.num_modes,
+            num=self.config.plot_ucs.num,
+            synchronous=self.config.plot_ucs.synchronous,
         )
 
         return fig
