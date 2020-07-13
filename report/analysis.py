@@ -1388,7 +1388,7 @@ class Report:
 
         return df_logdec
 
-    def summary(self):
+    def _summary(self):
         """Return datarfreames for Report summary.
 
         This method will create dataframes with relevant info about the report.
@@ -1404,19 +1404,15 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> stability1 = report.stability_level_1(D=[0.35, 0.35],
-        ...                          H=[0.08, 0.08],
-        ...                          HP=[10000, 10000],
-        ...                          RHO_ratio=[1.11, 1.14],
-        ...                          RHOd=30.45,
-        ...                          RHOs=37.65,
-        ...                          oper_speed=1000.0)
-        >>> stability2 = report.stability_level_2()
-        >>> df_lvl1, df_lvl2 = report.summary()
+        >>> stability1 = report._stability_level_1()
+        >>> stability2 = report._stability_level_2()
+        >>> df_lvl1, df_lvl2 = report._summary()
         """
+        machine_type = self.config.rotor_properties.rotor_id.type
+
         stab_lvl1_data = dict(
             tags=[self.tag],
-            machine_type=[self.machine_type],
+            machine_type=[machine_type],
             Q0=[self.Q0],
             Qa=[self.Qa],
             log_dec_a=[self.log_dec_a],
@@ -1424,7 +1420,7 @@ class Report:
             crti_speed=[self.crit_speed],
             MCS=[self.MCS],
             CSR=[self.CSR],
-            RHO_gas=[self.RHO_gas],
+            RHO_gas=[self.rho_gas],
         )
         stab_lvl2_data = dict(
             tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
@@ -1435,7 +1431,7 @@ class Report:
 
         return df_stab_lvl1, df_stab_lvl2
 
-    def plot_summary(self):
+    def _plot_summary(self):
         """Plot the report .
 
         This method will create tables to be presented in the report.
@@ -1449,17 +1445,11 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> stability1 = report.stability_level_1(D=[0.35, 0.35],
-        ...                          H=[0.08, 0.08],
-        ...                          HP=[10000, 10000],
-        ...                          RHO_ratio=[1.11, 1.14],
-        ...                          RHOd=30.45,
-        ...                          RHOs=37.65,
-        ...                          oper_speed=1000.0)
-        >>> stability2 = report.stability_level_2()
-        >>> table = report.plot_summary()
+        >>> stability1 = report._stability_level_1()
+        >>> stability2 = report._stability_level_2()
+        >>> table = report._plot_summary()
         """
-        stab_lvl1_data, stab_lvl2_data = self.summary()
+        stab_lvl1_data, stab_lvl2_data = self._summary()
         for var in stab_lvl1_data.columns[2:]:
             stab_lvl1_data[str(var)] = np.round(stab_lvl1_data[str(var)], 3)
 
@@ -1554,6 +1544,8 @@ def report_example():
     >>> report.rotor_type
     'between_bearings'
     """
+    from ross.config import Config
+
     i_d = 0
     o_d = 0.05
     n = 6
@@ -1584,6 +1576,7 @@ def report_example():
     freq = [400, 800, 1200, 1600]
     bearing0 = BearingElement(0, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
     bearing1 = BearingElement(6, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
+    oper_clerance_brg = [bearing0, bearing1]
 
     rotor = Rotor(shaft_elem, [disk0, disk1], [bearing0, bearing1])
 
@@ -1603,12 +1596,40 @@ def report_example():
     bearing1 = BearingElement(6, kxx=stfx, cxx=dampx, frequency=freq)
     max_clearance_brg = [bearing0, bearing1]
 
-    bearings = [min_clearance_brg, max_clearance_brg]
-    return Report(
-        rotor=rotor,
-        speed_range=(400, 1000),
-        tripspeed=1200,
-        bearing_stiffness_range=(5, 8),
-        bearing_clearance_lists=bearings,
-        speed_units="rad/s",
+    config = Config()
+    config.update_config(
+        rotor_properties={
+            "rotor_speeds": {
+                "min_speed": 400,
+                "max_speed": 1000,
+                "oper_speed": 800,
+                "trip_speed": 1200,
+            }
+        },
+        bearings={
+            "oper_clearance": oper_clerance_brg,
+            "min_clearance": min_clearance_brg,
+            "max_clearance": max_clearance_brg,
+        },
+        run_campbell={"speed_range": np.linspace(0, 1500, 51)},
+        run_unbalance_response={
+            "probes": {
+                "node": [1, 4],
+                "orientation": [np.pi / 2, np.pi / 2],
+                "unit": "rad",
+            },
+            "frequency_range": np.linspace(0, 1500, 201),
+        },
+        plot_ucs={"stiffness_range": (5, 8)},
+        stability_level1={
+            "D": [0.35, 0.35],
+            "H": [0.08, 0.08],
+            "rated_power": [10000, 10000],
+            "rho_ratio": [1.11, 1.14],
+            "rho_suction": 30.45,
+            "rho_discharge": 37.65,
+            "unit": "m",
+        },
     )
+
+    return Report(rotor, config)
