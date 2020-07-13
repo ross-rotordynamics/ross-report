@@ -925,7 +925,7 @@ class Report:
 
         return fig              
 
-    def stability_level_1(self, D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd, unit="m"):
+    def _stability_level_1(self):
         """Stability analysis level 1.
 
         This analysis consider a anticipated cross coupling QA based on
@@ -934,30 +934,6 @@ class Report:
 
         Components such as seals and impellers are not considered in this
         analysis.
-
-        Parameters
-        ----------
-        D: list
-            Impeller diameter, m (in.),
-            Blade pitch diameter, m (in.),
-        H: list
-            Minimum diffuser width per impeller, m (in.),
-            Effective blade height, m (in.),
-        HP: list
-            Rated power per stage/impeller, W (HP),
-        oper_speed: float
-            Operating speed, rpm,
-        RHO_ratio: list
-            Density ratio between the discharge gas density and the suction
-            gas density per impeller (RHO_discharge / RHO_suction),
-            kg/m3 (lbm/in.3),
-        RHOs: float
-            Suction gas density in the first stage, kg/m3 (lbm/in.3).
-        RHOd: float
-            Discharge gas density in the last stage, kg/m3 (lbm/in.3),
-        unit: str, optional
-            Adopted unit system. Options are "m" (meter) and "in" (inch)
-            Default is "m"
 
         Attributes
         ----------
@@ -974,49 +950,66 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> fig1, fig2 = report.stability_level_1(D=[0.35, 0.35],
-        ...                                       H=[0.08, 0.08],
-        ...                                       HP=[10000, 10000],
-        ...                                       RHO_ratio=[1.11, 1.14],
-        ...                                       RHOd=30.45,
-        ...                                       RHOs=37.65,
-        ...                                       oper_speed=1000.0)
+        # >>> import ross as rs
+        >>> report = report_example()
+        >>> fig1, fig2 = report._stability_level_1()
         >>> report.Qa
-        23022.32142857143
+        28777.90178571429
         """
+        D = self.config.stability_level1.D
+        H = self.config.stability_level1.H
+        HP = self.config.stability_level1.rated_power
+        rho_ratio = self.config.stability_level1.rho_ratio
+        RHOs = self.config.stability_level1.rho_suction
+        RHOd = self.config.stability_level1.rho_discharge
+        unit = self.config.stability_level1.unit
+
+        machine_type = self.config.rotor_properties.rotor_id.type
+
+        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
+            speed = self.config.rotor_properties.rotor_speeds.oper_speed
+            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
+            self.MCS = maxspeed
+
+        if self.config.rotor_properties.rotor_speeds.unit == "rad/s":
+            speed = self.config.rotor_properties.rotor_speeds.oper_speed * 30 / np.pi
+            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
+            self.MCS = maxspeed
+
         steps = 11
-        if unit == "m":
+        if self.config.stability_level1.unit == "m":
             C = 9.55
-        elif unit == "in":
+        elif self.config.stability_level1.unit == "in":
             C = 63.0
         else:
-            raise TypeError("choose between meters (m) or inches (in)")
+            raise ValueError("config.stability_level1.unit options are 'm' or 'in'.")
 
         if len(D) != len(H):
-            raise Exception("length of D must be the same of H")
+            raise Exception(
+                "config.stability_level1.H and config.stability_level1.D"
+                "must have the same length."
+            )
 
         Qa = 0.0
         cross_coupled_array = np.array([])
         # Qa - Anticipated cross-coupling for compressors - API 684 - SP6.8.5.6
-        if self.machine_type == "compressor":
+        if machine_type == "compressor":
             Bc = 3.0
             Dc, Hc = D, H
             for i, disk in enumerate(self.rotor.disk_elements):
                 if disk.n in self.disk_nodes:
-                    qi = HP[i] * Bc * C * RHO_ratio[i] / (Dc[i] * Hc[i] * oper_speed)
+                    qi = HP[i] * Bc * C * rho_ratio[i] / (Dc[i] * Hc[i] * speed)
                     Qi = np.linspace(0, 10 * qi, steps)
                     cross_coupled_array = np.append(cross_coupled_array, Qi)
                     Qa += qi
 
         # Qa - Anticipated cross-coupling for turbines - API 684 - SP6.8.5.6
-        if self.machine_type == "turbine" or self.machine_type == "axial_flow":
+        if machine_type == "turbine" or machine_type == "axial_flow":
             Bt = 1.5
             Dt, Ht = D, H
             for i, disk in enumerate(self.rotor.disk_elements):
                 if disk.n in self.disk_nodes:
-                    qi = (HP[i] * Bt * C) / (Dt[i] * Ht[i] * oper_speed)
+                    qi = (HP[i] * Bt * C) / (Dt[i] * Ht[i] * speed)
                     Qi = np.linspace(0, 10 * qi, steps)
                     cross_coupled_array = np.append(cross_coupled_array, Qi)
                     Qa += qi
@@ -1047,13 +1040,8 @@ class Report:
                 cross_coupling = BearingElement(n=int(n), kxx=0, cxx=0, kxy=Q, kyx=-Q)
                 bearings.append(cross_coupling)
 
-                aux_rotor = Rotor(
-                    shaft_elements=self.rotor.shaft_elements,
-                    disk_elements=[],
-                    bearing_elements=bearings,
-                    rated_w=self.rotor.rated_w,
-                )
-                modal = aux_rotor.run_modal(speed=oper_speed * np.pi / 30)
+                aux_rotor = Rotor(self.rotor.shaft_elements, [], bearings)
+                modal = aux_rotor.run_modal(speed=speed * np.pi / 30)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec[i] = modal.log_dec[non_backward][0]
 
@@ -1066,13 +1054,8 @@ class Report:
                     cross_coupling = BearingElement(n=n, kxx=0, cxx=0, kxy=q, kyx=-q)
                     bearings.append(cross_coupling)
 
-                aux_rotor = Rotor(
-                    shaft_elements=self.rotor.shaft_elements,
-                    disk_elements=[],
-                    bearing_elements=bearings,
-                    rated_w=self.rotor.rated_w,
-                )
-                modal = aux_rotor.run_modal(speed=oper_speed * np.pi / 30)
+                aux_rotor = Rotor(self.rotor.shaft_elements, [], bearings)
+                modal = aux_rotor.run_modal(speed=speed * np.pi / 30)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec[i] = modal.log_dec[non_backward][0]
 
@@ -1097,8 +1080,8 @@ class Report:
         log_dec_a = log_dec[np.where(cross_coupled_Qa == Qa)][0]
 
         # CSR - Critical Speed Ratio
-        crit_speed = self.rotor.run_modal(speed=self.maxspeed).wn[0]
-        CSR = self.maxspeed / crit_speed
+        crit_speed = self.rotor.run_modal(speed=maxspeed * np.pi / 30).wn[0]
+        CSR = maxspeed * (np.pi / 30) / crit_speed
 
         # RHO_mean - Average gas density
         RHO_mean = (RHOd + RHOs) / 2
@@ -1112,7 +1095,6 @@ class Report:
         )
 
         # Plotting area
-
         fig1 = go.Figure()
 
         fig1.add_trace(
@@ -1238,26 +1220,26 @@ class Report:
                     "<b>CSR vs. Mean Gas Density</b><br>"
                     + "<b>(API 684 - SP 6.8.5.10)</b>"
                 )
-            ),
+            )
         )
 
         # Level 1 screening criteria - API 684 - SP6.8.5.10
         idx = min(range(len(RHO)), key=lambda i: abs(RHO[i] - RHO_mean))
 
-        if self.machine_type == "compressor":
+        if machine_type == "compressor":
             if Q0 / Qa < 2.0:
                 condition = True
 
-            if log_dec_a < 0.1:
+            elif log_dec_a < 0.1:
                 condition = True
 
-            if 2.0 < Q0 / Qa < 10.0 and CSR > CSR_boundary[idx]:
+            elif 2.0 < Q0 / Qa < 10.0 and CSR > CSR_boundary[idx]:
                 condition = True
 
             else:
                 condition = False
 
-        if self.machine_type == "turbine" or self.machine_type == "axial flow":
+        if machine_type == "turbine" or machine_type == "axial flow":
             if log_dec_a < 0.1:
                 condition = True
 
@@ -1271,13 +1253,12 @@ class Report:
         self.CSR = CSR
         self.Qratio = Q0 / Qa
         self.crit_speed = crit_speed
-        self.MCS = self.maxspeed
-        self.RHO_gas = RHO_mean
+        self.rho_gas = RHO_mean
         self.condition = condition
 
         return fig1, fig2
 
-    def stability_level_2(self):
+    def _stability_level_2(self):
         """Stability analysis level 2.
 
         For the level 2 stability analysis additional sources that contribute
@@ -1296,8 +1277,10 @@ class Report:
         -------
         >>> import ross as rs
         >>> report = rs.report_example()
-        >>> dataframe = report.stability_level_2()
+        >>> dataframe = report._stability_level_2()
         """
+        oper_speed = self.config.rotor_properties.rotor_speeds.oper_speed
+
         # Build a list of seals
         seal_list = [
             copy(b) for b in self.rotor.bearing_elements if isinstance(b, SealElement)
@@ -1323,9 +1306,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[disk],
                     bearing_elements=bearing_list,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_disk.append(modal.log_dec[non_backward][0])
 
@@ -1345,9 +1327,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=self.rotor.disk_elements,
                     bearing_elements=bearing_list,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_disk.append(modal.log_dec[non_backward][0])
 
@@ -1363,9 +1344,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[],
                     bearing_elements=bearings_seal,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_seal.append(modal.log_dec[non_backward][0])
 
@@ -1380,16 +1360,15 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[],
                     bearing_elements=self.rotor.bearing_elements,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_seal.append(modal.log_dec[non_backward][0])
 
             data_seal = {"tags": seal_tags, "log_dec": log_dec_seal}
 
         # Evaluate log dec for all components
-        modal = self.rotor.run_modal(speed=self.maxspeed)
+        modal = self.rotor.run_modal(speed=oper_speed)
         non_backward = modal.whirl_direction() != "Backward"
         log_dec_full.append(modal.log_dec[non_backward][0])
         rotor_tags = [self.tag]
