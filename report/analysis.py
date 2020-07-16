@@ -36,9 +36,9 @@ class Report:
     Parameters
     ----------
     rotor : object
-        A rotor built from rotor_assembly.
+        A rotor built from ross.Rotor class.
     config : object
-        An instance of class Config() with the analyses configurations.
+        An instance of class report.Config() with the analyses configurations.
 
     Attributes
     ----------
@@ -52,12 +52,13 @@ class Report:
     -------
     A Report object
 
-    Examples
-    --------
+    Example
+    -------
     >>> import ross as rs
+    >>> import report as rp
     >>> rotor = rs.rotor_example()
-    >>> config = rs.Config()
-    >>> report = rs.Report(rotor=rotor, config=config)
+    >>> config = rp.Config()
+    >>> report = rp.Report(rotor=rotor, config=config)
     >>> report.rotor_type
     'between_bearings'
     """
@@ -125,7 +126,8 @@ class Report:
         self.tag = config.rotor_properties.rotor_id.tag
         self.config = config
 
-    def _rotor_instance(self, rotor, bearing_list):
+    @staticmethod
+    def _rotor_instance(rotor, bearing_list):
         """Build an instance of an auxiliary rotor with different bearing clearances.
 
         Parameters
@@ -143,6 +145,7 @@ class Report:
         Example
         -------
         >>> import ross as rs
+        >>> import report as rp
         >>> stfx = [0.4e7, 0.5e7, 0.6e7, 0.7e7]
         >>> damp = [2.8e3, 2.7e3, 2.6e3, 2.5e3]
         >>> freq = [400, 800, 1200, 1600]
@@ -150,7 +153,7 @@ class Report:
         >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
         >>> bearings = [bearing0, bearing1]
         >>> rotor = rs.rotor_example()
-        >>> report = rs.report_example()
+        >>> report = rp.report_example()
         >>> aux_rotor = report._rotor_instance(rotor, bearings)
         """
         sh_elm = rotor.shaft_elements
@@ -189,12 +192,13 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
+        >>> import report as rp
         >>> report = rs.report_example()
         >>> # to run the report analysis, use:
         >>> # report.run_report()
         """
         fig_ucs = []
+        fig_dcs = []
         fig_mode_shape = []
         fig_unbalance = []
         fig_a_lvl1 = []
@@ -202,17 +206,12 @@ class Report:
         df_unbalance = []
         summaries = []
 
-        rotor0 = self.rotor
+        rotor = copy(self.rotor)
 
         # static analysis
-        static = rotor0.run_static()
-        fig_static = [
-            static.plot_free_body_diagram,
-            static.plot_deformation,
-            static.plot_shearing_force,
-            static.plot_bending_moment,
-        ]
+        fig_static = self._plot_static_analysis()
 
+        # loop through bearings clearance
         for k, bearings in self.config.bearings.__dict__.items():
             if not isinstance(bearings, Iterable):
                 raise ValueError(
@@ -222,14 +221,10 @@ class Report:
             self.rotor = self._rotor_instance(rotor0, bearings)
 
             # undamped critical speed map
-            fig_ucs.append(
-                self._plot_ucs(
-                    stiffness_range=self.config.plot_ucs.stiffness_range,
-                    num=self.config.plot_ucs.num,
-                    num_modes=self.config.plot_ucs.num_modes,
-                    synchronous=self.config.plot_ucs.synchronous,
-                )
-            )
+            fig_ucs.append(self._plot_ucs())
+
+            # campbell diagram
+            fig_dcs.append(self._plot_campbell_diagram())
 
             for i, mode in enumerate([1, 3]):
                 # mode shape figures
@@ -254,10 +249,12 @@ class Report:
 
         df_unbalance = pd.concat(df_unbalance)
 
-        self.rotor = rotor0
+        self.rotor = rotor
 
         return {
+            "fig_static": fig_static,
             "fig_ucs": fig_ucs,
+            "fig_dcs": fig_dcs,
             "fig_mode_shape": fig_mode_shape,
             "fig_unbalance": fig_unbalance,
             "df_unbalance": df_unbalance,
@@ -267,68 +264,56 @@ class Report:
             "summaries": summaries,
         }
 
-    def assets_prep(self, dashboard_data):
+    def _plot_campbell_diagram(self):
+        """Plot Campbell Diagram.
 
-        # Rotor figure
-        plot_rotor = self.rotor.plot_rotor()
-        plot_rotor.layout["height"] = 350
-        plot_rotor.layout["width"] = 750
+        This function will calculate the damped natural frequencies for a speed range.
 
-        plot_rotor.layout["xaxis"]["autorange"] = True
-        plot_rotor.layout["yaxis"]["autorange"] = True
-        plot_rotor.update_layout()
+        Returns
+        -------
+        fig : Plotly graph_objects.Figure()
+            The figure object with the plot.
 
-        # Undamped critical speed figure
-        ucs_fig = make_subplots(
-            cols=2,
-            rows=1,
-            x_title="Bearing Stiffness",
-            y_title="Critical Speed",
-            subplot_titles=["Undamped Critical Speed Map", "", "", ""],
-        )
+        Example
+        -------
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_campbell_diagram()
+        """
+        fig = self.rotor.run_campbell(
+            speed_range=self.config.run_campbell.speed_range,
+            frequencies=self.config.run_campbell.frequencies,
+        ).plot(harmonics=self.config.run_campbell.harmonics)
 
-        ucs_row = 1
-        ucs_col = 1
-        for fig in dashboard_data["fig_ucs"]:
-            for j in fig.data:
-                ucs_fig.add_trace(j, row=ucs_row, col=ucs_col)
-            if ucs_col == 1:
-                ucs_col = 2
+        return fig
 
-        ucs_fig.layout["height"] = 350
-        ucs_fig.layout["width"] = 750
-        ucs_fig.update_layout()
+    def _plot_static_analysis(self):
+        """Run static analysis.
 
-        # Undamped mode shape
-        mode_fig = make_subplots(
-            cols=2,
-            rows=2,
-            x_title="Rotor length",
-            y_title="Non dimensional deformation",
-            subplot_titles=["Undamped Mode Shape", "", "", ""],
-        )
-        mode_row = 1
-        mode_col = 1
+        Static analysis calculates free-body diagram, deformed shaft, shearing
+        force diagram and bending moment diagram.
 
-        for fig in dashboard_data["fig_mode_shape"]:
-            for j in fig.data:
-                mode_fig.add_trace(j, row=mode_row, col=mode_col)
-            if mode_col == 1:
-                mode_col = 2
-            else:
-                mode_row = 2
-                mode_col = 1
+        Returns
+        -------
+        figs : list
+            list of Plotly graph_objects.Figure() from Rotor.run_static()
 
-        mode_fig.layout["height"] = 750
-        mode_fig.layout["width"] = 750
-        mode_fig.update_layout()
+        Example
+        -------
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_static_analysis()
+        """
+        static = self.rotor.run_static()
 
-        figs = plot_rotor, ucs_fig, mode_fig
-        html_figs = []
-        for fig in figs:
-            html_figs.append(fig.to_html(full_html=False))
+        figs = [
+            static.plot_free_body_diagram(),
+            static.plot_deformation(),
+            static.plot_shearing_force(),
+            static.plot_bending_moment(),
+        ]
 
-        return {"figs": figs, "html_figs": html_figs}
+        return figs
 
     def _plot_ucs(self):
         """Plot undamped critical speed map.
@@ -344,8 +329,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> fig = report._plot_ucs()
         """
         fig = self.rotor.plot_ucs(
@@ -353,6 +338,8 @@ class Report:
             num_modes=self.config.plot_ucs.num_modes,
             num=self.config.plot_ucs.num,
             synchronous=self.config.plot_ucs.synchronous,
+            stiffness_units=self.config.plot_ucs.stiffness_units,
+            frequency_units=self.config.plot_ucs.frequency_units,
         )
 
         return fig
@@ -367,8 +354,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> report._static_forces()
         array([44.09320349, 44.09320349])
         """
@@ -407,8 +394,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> report._unbalance_forces(mode=0)
         array([0.04479869])
         """
@@ -526,8 +513,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> fig, unbalance_dict = report._unbalance_response(mode=0)
         """
         maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
@@ -572,19 +559,19 @@ class Report:
         )
 
         probe_nodes = self.config.run_unbalance_response.probes.node
-        probe_orien = self.config.run_unbalance_response.probes.orientation
+        probe_orientations = self.config.run_unbalance_response.probes.orientation
         unbalance_dict = {
             "probe {}".format(i + 1): None for i in range(len(probe_nodes))
         }
 
         k = 0
-        for n, o in zip(probe_nodes, probe_orien):
+        for n, o in zip(probe_nodes, probe_orientations):
             dof = self.rotor.number_dof * n + 1
             fig = response.plot(dof)
 
             for j, data in enumerate(fig["data"]):
-                data.line.color = list(tableau_colors.keys())[k]
-                data.marker.color = list(tableau_colors.keys())[k]
+                data.line.color = list(tableau_colors)[k]
+                data.marker.color = list(tableau_colors)[k]
                 data.name = "Probe Node {}".format(n)
                 data.legendgroup = "Probe Node {}".format(n)
                 data.showlegend = True if j == 0 else False
@@ -640,9 +627,9 @@ class Report:
                     SM_ref = (wn[i] - maxspeed) / maxspeed
 
                 else:
-                    SM = None
-                    SM_ref = None
-                    SMspeed = None
+                    SM = "None"
+                    SM_ref = "None"
+                    SMspeed = "None"
 
                 _dict["Amplification factor"].append(AF)
                 _dict["Separation margin - ACTUAL"].append(SM)
@@ -742,8 +729,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> fig = report._mode_shape(mode=0)
         >>> report.node_min
         array([], dtype=float64)
@@ -823,35 +810,11 @@ class Report:
             node_max = [max(df_disks["n"])]
 
         nodes_pos = np.array(nodes_pos)
-        rpm_speed = (30 / np.pi) * modal.wn[mode]
 
         self.node_min = node_min
         self.node_max = node_max
 
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=zn,
-                y=vn,
-                mode="lines",
-                line=dict(width=4, color=colors1[3]),
-                name="<b>Mode {}</b><br><b>Speed = {:.1f} RPM</b>".format(
-                    mode, rpm_speed
-                ),
-                hovertemplate="Axial position: %{x:.2f}<br>Deformation: %{y:.2f}",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=nodes_pos,
-                y=np.zeros(len(nodes_pos)),
-                mode="lines",
-                line=dict(width=4, color=colors1[5], dash="dashdot"),
-                name="centerline",
-                hoverinfo="none",
-                showlegend=False,
-            )
-        )
+        fig = modal.plot_mode_2d(frequency_units=self.config.mode_shape.frequency_units)
         fig.add_trace(
             go.Scatter(
                 x=nodes_pos[df_bearings["n"]],
@@ -892,38 +855,9 @@ class Report:
                 )
             )
 
-        fig.update_xaxes(
-            title_text="<b>Rotor lenght</b>",
-            title_font=dict(family="Arial", size=20),
-            tickfont=dict(size=16),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-        )
-        fig.update_yaxes(
-            title_text="<b>Non dimensional deformation</b>",
-            title_font=dict(family="Arial", size=20),
-            tickfont=dict(size=16),
-            range=[-2, 2],
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-        )
-        fig.update_layout(
-            width=1200,
-            height=900,
-            plot_bgcolor="white",
-            hoverlabel_align="right",
-            title=dict(
-                text="<b>Undamped Mode Shape</b>".format(node), font=dict(size=20)
-            ),
-        )
+        fig.update_yaxes(range=[-2, 2])
 
-        return fig              
+        return fig
 
     def _stability_level_1(self):
         """Stability analysis level 1.
@@ -950,8 +884,8 @@ class Report:
 
         Example
         -------
-        # >>> import ross as rs
-        >>> report = report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> fig1, fig2 = report._stability_level_1()
         >>> report.Qa
         28777.90178571429
@@ -1220,7 +1154,7 @@ class Report:
                     "<b>CSR vs. Mean Gas Density</b><br>"
                     + "<b>(API 684 - SP 6.8.5.10)</b>"
                 )
-            )
+            ),
         )
 
         # Level 1 screening criteria - API 684 - SP6.8.5.10
@@ -1275,8 +1209,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> dataframe = report._stability_level_2()
         """
         oper_speed = self.config.rotor_properties.rotor_speeds.oper_speed
@@ -1402,8 +1336,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> stability1 = report._stability_level_1()
         >>> stability2 = report._stability_level_2()
         >>> df_lvl1, df_lvl2 = report._summary()
@@ -1443,8 +1377,8 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
+        >>> import report as rp
+        >>> report = rp.report_example()
         >>> stability1 = report._stability_level_1()
         >>> stability2 = report._stability_level_2()
         >>> table = report._plot_summary()
@@ -1537,14 +1471,14 @@ def report_example():
     -------
     An instance of a report object.
 
-    Examples
-    --------
-    >>> import ross as rs
-    >>> report = rs.report_example()
+    Example
+    -------
+    >>> import report as rp
+    >>> report = rp.report_example()
     >>> report.rotor_type
     'between_bearings'
     """
-    from ross.config import Config
+    from report.config import Config
 
     i_d = 0
     o_d = 0.05
