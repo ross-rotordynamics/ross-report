@@ -188,30 +188,49 @@ class Config:
             List of bearing elements. The coefficients should be calculated for the maximum
             clearance.
 
+    mode_shape : dict
+        Dictionary configurating the mode shape analysis
+
+        frequency_units : str
+            Unit for the frequency values.
+            Default is "rad/s"
+
     run_campbell : dict
         Dictionary configurating run_campbell parameters.
 
         speed_range : list, array
             Array with the speed range.
-        num_modes : float
+        num_modes : float, optional
             Number of frequencies that will be calculated.
             Default is 6.
+        harmonics : list, optional
+            List with the harmonics to be plotted.
+            The default is to plot 1x.
+        frequency_units : str, optional
+            Unit for the frequency values.
+            Default is "rad/s".
 
     plot_ucs : dict
         Dictionary configurating plot_ucs parameters.
 
         stiffness_range : tuple, optional
             Tuple with (start, end) for stiffness range.
-        num : int
+        num : int, optional
             Number of steps in the range.
             Default is 30.
         num_modes : int, optional
             Number of modes to be calculated.
             Default is 16.
-        synchronous : bool
+        synchronous : bool, optional
             If True a synchronous analysis is carried out and the frequency of
             the first forward model will be equal to the speed.
             Default is False.
+        stiffness_units : str, optional
+            Unit for the stiffness values.
+            Default is "N/m".
+        frequency_units : str, optional
+            Unit for the frequency values.
+            Default is "rad/s".
 
     run_unbalance_response : dict
         Dictionary configurating run_unbalance_response parameters.
@@ -261,15 +280,24 @@ class Config:
             Tolerance (relative) for termination. Applied to scipy.optimize.newton to
             calculate the approximated critical speeds.
             Default is 0.005 (0.5%).
+        frequency_units : str, optional
+            Frequency units.
+            Default is "rad/s"
+        amplitude_units : str, optional
+            Amplitude units.
+            Default is "m/N"
+        phase_units : str, optional
+            Phase units.
+            Default is "rad"
 
     stability_level1 : dict
         Dictionary configurating stability_level_1 parameters.
 
         D : list, array
-            Impeller diameter, m (in.) or Blade pitch diameter, m (in.).
+            Impeller diameter, m (in.) or Blade pitch diameter, m (in).
             The disk elements order must be observed to input this list.
         H : list, array
-            Minimum diffuser width per impeller, m (in.) or Effective blade height, m (in.).
+            Minimum diffuser width per impeller, m (in) or Effective blade height, m (in).
             The disk elements order must be observed to input this list.
         rated_power : list
             Rated power per stage/impeller, W (HP),
@@ -320,7 +348,7 @@ class Config:
             },
             "rotor_id": {
                 "type": "compressor",
-                "tag": None
+                "tag": None,
             },
         })
 
@@ -331,10 +359,17 @@ class Config:
             "max_clearance": None,
         })
 
+        # Configurating modal analysis
+        self.mode_shape = _Dict({
+            "frequency_units": "rad/s"
+        })
+
         # Configurating campbell options
         self.run_campbell = _Dict({
             "speed_range": None,
             "num_modes": 6,
+            "harmonics": [1],
+            "frequency_units": "rad/s"
         })
 
         # Configurating UCS options
@@ -343,6 +378,8 @@ class Config:
             "num": 30,
             "num_modes": 16,
             "synchronous": False,
+            "stiffness_units": "N/m",
+            "frequency_units": "rad/s",
         })
 
         # Configurating unbalance response options
@@ -358,6 +395,9 @@ class Config:
             "num_modes": 12,
             "num_points": 10,
             "rtol": 0.005,
+            "frequency_units": "rad/s",
+            "amplitude_units": "m",
+            "phase_units": "rad",
         })
 
         # Configurating stability level 1 analysis
