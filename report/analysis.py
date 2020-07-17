@@ -1,20 +1,19 @@
 # fmt: off
+from collections.abc import Iterable
 from copy import copy, deepcopy
-from pathlib import Path
-
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+from plotly import express as px
+from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.interpolate import interp1d
 from scipy.signal import argrelextrema
 
-import ross
 from ross.bearing_seal_element import BearingElement, SealElement
 from ross.disk_element import DiskElement
 from ross.materials import steel
+from ross.plotly_theme import tableau_colors
 from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
 
@@ -22,7 +21,6 @@ from ross.shaft_element import ShaftElement
 
 # set Plotly palette of colors
 colors1 = px.colors.qualitative.Dark24
-colors2 = px.colors.sequential.PuBu
 
 __all__ = ["Report", "report_example"]
 
@@ -38,28 +36,9 @@ class Report:
     Parameters
     ----------
     rotor : object
-        A rotor built from rotor_assembly.
-    speed_range : tuple
-        Tuple with (min, max) for speed range.
-    tripspeed : float
-        Machine trip speed.
-    bearing_stiffness_range : tuple, optional
-        Tuple with (start, end) bearing stiffness range.
-        Argument to calculate the Undamped Critical Speed Map.
-    bearing_clearance_lists : list of lists, optional
-        List with two bearing elements lists:
-            The first bearing list is set for minimum clearance.
-            The second bearing list it set for maximum clearance.
-    machine_type : str
-        Machine type analyzed. Options: compressor, turbine or axial_flow.
-        If other option is given, it will be treated as a compressor
-        Default is compressor
-    speed_units : str
-        String defining the unit for rotor speed.
-        Default is "rpm".
-    tag : str
-        String to name the rotor model
-        Default is the Rotor.tag attribute
+        A rotor built from ross.Rotor class.
+    config : object
+        An instance of class report.Config() with the analyses configurations.
 
     Attributes
     ----------
@@ -73,64 +52,19 @@ class Report:
     -------
     A Report object
 
-    Examples
-    --------
+    Example
+    -------
     >>> import ross as rs
+    >>> import report as rp
     >>> rotor = rs.rotor_example()
-    >>>
-    >>> # coefficients for minimum clearance
-    >>> stfx = [0.7e7, 0.8e7, 0.9e7, 1.0e7]
-    >>> damp = [2.0e3, 1.9e3, 1.8e3, 1.7e3]
-    >>> freq = [400, 800, 1200, 1600]
-    >>> bearing0 = rs.BearingElement(0, kxx=stfx, cxx=damp, frequency=freq)
-    >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
-    >>> min_clearance_brg = [bearing0, bearing1]
-    >>>
-    >>> # coefficients for maximum clearance
-    >>> stfx = [0.4e7, 0.5e7, 0.6e7, 0.7e7]
-    >>> damp = [2.8e3, 2.7e3, 2.6e3, 2.5e3]
-    >>> freq = [400, 800, 1200, 1600]
-    >>> bearing0 = rs.BearingElement(0, kxx=stfx, cxx=damp, frequency=freq)
-    >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
-    >>> max_clearance_brg = [bearing0, bearing1]
-    >>>
-    >>> bearings = [min_clearance_brg, max_clearance_brg]
-    >>> report = rs.Report(rotor=rotor,
-    ...                 speed_range=(400, 1000),
-    ...                 tripspeed=1200,
-    ...                 bearing_stiffness_range=(5,8),
-    ...                 bearing_clearance_lists=bearings,
-    ...                 speed_units="rad/s")
+    >>> config = rp.Config()
+    >>> report = rp.Report(rotor=rotor, config=config)
     >>> report.rotor_type
     'between_bearings'
     """
 
-    def __init__(
-        self,
-        rotor,
-        speed_range,
-        tripspeed,
-        bearing_stiffness_range=None,
-        bearing_clearance_lists=None,
-        machine_type="compressor",
-        speed_units="rpm",
-        tag=None,
-    ):
+    def __init__(self, rotor, config):
         self.rotor = rotor
-        self.speed_units = speed_units
-        self.speed_range = speed_range
-
-        if speed_units == "rpm":
-            self.minspeed = speed_range[0] * np.pi / 30
-            self.maxspeed = speed_range[1] * np.pi / 30
-            self.tripspeed = tripspeed * np.pi / 30
-        if speed_units == "rad/s":
-            self.minspeed = speed_range[0]
-            self.maxspeed = speed_range[1]
-            self.tripspeed = tripspeed
-
-        self.bearing_stiffness_range = bearing_stiffness_range
-        self.bearing_clearance_lists = bearing_clearance_lists
 
         # check if rotor is between bearings, single or double overhung
         # fmt: off
@@ -178,84 +112,22 @@ class Report:
         self.disk_nodes = disk_nodes
 
         machine_options = ["compressor", "turbine", "axial_flow"]
+        machine_type = config.rotor_properties.rotor_id.type
         if machine_type not in machine_options:
-            machine_type = "compressor"
-        self.machine_type = machine_type
+            raise ValueError(
+                "rotor_id.type is set to {}. Please choose between {}.".format(
+                    machine_type, machine_options
+                )
+            )
 
-        if tag is None:
-            self.tag = rotor.tag
-        else:
-            self.tag = tag
+        if config.rotor_properties.rotor_id.tag is None:
+            config.update_config(rotor_properties=dict(rotor_id=dict(tag=rotor.tag)))
 
-        # Multiplicative factor of the speed range - according to API 684
-        self.speed_factor = 1.25
+        self.tag = config.rotor_properties.rotor_id.tag
+        self.config = config
 
-        # list of attributes
-        self.Q0 = None
-        self.Qa = None
-        self.log_dec_a = None
-        self.CSR = None
-        self.Qratio = None
-        self.crit_speed = None
-        self.MCS = None
-        self.RHO_gas = None
-        self.condition = None
-        self.node_min = None
-        self.node_max = None
-        self.U_force = None
-
-    @classmethod
-    def from_saved_rotors(
-        cls,
-        path,
-        speed_range,
-        tripspeed,
-        bearing_stiffness_range=None,
-        bearing_clearance_lists=None,
-        machine_type="compressor",
-        speed_units="rpm",
-        tag=None,
-    ):
-        """Instantiate a rotor from a previously saved rotor model.
-
-        Parameters
-        ----------
-        path : str
-            File name
-        maxspeed : float
-            Maximum operation speed.
-        minspeed : float
-            Minimum operation speed.
-        tripspeed : float
-            Machine trip speed.
-        stiffness_range : tuple, optional
-            Tuple with (start, end) for stiffness range. Argument to calculate
-            the Undamped Critical Speed Map
-        machine_type : str
-            Machine type analyzed. Options: compressor, turbine or axial_flow.
-            If other option is given, it will be treated as a compressor
-            Default is compressor
-        speed_units : str
-            String defining the unit for rotor speed.
-            Default is "rpm".
-
-        Returns
-        -------
-        A Report object
-        """
-        rotor = Rotor.load(path)
-        return cls(
-            rotor,
-            speed_range,
-            tripspeed,
-            bearing_stiffness_range,
-            bearing_clearance_lists,
-            machine_type,
-            speed_units,
-            tag,
-        )
-
-    def rotor_instance(self, rotor, bearing_list):
+    @staticmethod
+    def _rotor_instance(rotor, bearing_list):
         """Build an instance of an auxiliary rotor with different bearing clearances.
 
         Parameters
@@ -273,6 +145,7 @@ class Report:
         Example
         -------
         >>> import ross as rs
+        >>> import report as rp
         >>> stfx = [0.4e7, 0.5e7, 0.6e7, 0.7e7]
         >>> damp = [2.8e3, 2.7e3, 2.6e3, 2.5e3]
         >>> freq = [400, 800, 1200, 1600]
@@ -280,52 +153,23 @@ class Report:
         >>> bearing1 = rs.BearingElement(6, kxx=stfx, cxx=damp, frequency=freq)
         >>> bearings = [bearing0, bearing1]
         >>> rotor = rs.rotor_example()
-        >>> report = rs.report_example()
-        >>> aux_rotor = report.rotor_instance(rotor, bearings)
+        >>> report = rp.report_example()
+        >>> aux_rotor = report._rotor_instance(rotor, bearings)
         """
         sh_elm = rotor.shaft_elements
         dk_elm = rotor.disk_elements
         pm_elm = rotor.point_mass_elements
-        min_w = rotor.min_w
-        max_w = rotor.max_w
-        rated_w = rotor.rated_w
         tag = rotor.tag
 
-        aux_rotor = Rotor(
-            sh_elm, dk_elm, bearing_list, pm_elm, min_w, max_w, rated_w, tag
-        )
+        aux_rotor = Rotor(sh_elm, dk_elm, bearing_list, pm_elm, tag=tag)
 
         return aux_rotor
 
-    def run(self, D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd, unit="m"):
-        """Run API report.
+    def run_report(self):
+        """Run rotordynamics report.
 
-        This method runs the API analysis and prepare the results to
+        This method runs the rotordynamics analyses and prepare the results to
         generate the PDF report.
-
-        Parameters
-        ----------
-        D: list
-            Impeller diameter, m (in.),
-            Blade pitch diameter, m (in.),
-        H: list
-            Minimum diffuser width per impeller, m (in.),
-            Effective blade height, m (in.),
-        HP: list
-            Rated power per stage/impeller, W (HP),
-        oper_speed: float
-            Operating speed, rpm,
-        RHO_ratio: list
-            Density ratio between the discharge gas density and the suction
-            gas density per impeller (RHO_discharge / RHO_suction),
-            kg/m3 (lbm/in.3),
-        RHOs: float
-            Suction gas density in the first stage, kg/m3 (lbm/in.3).
-        RHOd: float
-            Discharge gas density in the last stage, kg/m3 (lbm/in.3),
-        unit: str, optional
-            Adopted unit system. Options are "m" (meter) and "in" (inch)
-            Default is "m"
 
         Returns
         -------
@@ -348,19 +192,13 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
+        >>> import report as rp
         >>> report = rs.report_example()
-        >>> D = [0.35, 0.35]
-        >>> H = [0.08, 0.08]
-        >>> HP = [10000, 10000]
-        >>> RHO_ratio = [1.11, 1.14]
-        >>> RHOd = 30.45
-        >>> RHOs = 37.65
-        >>> oper_speed = 1000.0
-        >>> # to run the API report analysis, use:
-        >>> # report.run(D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd)
+        >>> # to run the report analysis, use:
+        >>> # report.run_report()
         """
         fig_ucs = []
+        fig_dcs = []
         fig_mode_shape = []
         fig_unbalance = []
         fig_a_lvl1 = []
@@ -368,41 +206,55 @@ class Report:
         df_unbalance = []
         summaries = []
 
-        rotor0 = self.rotor
+        rotor = copy(self.rotor)
 
-        for bearings in self.bearing_clearance_lists:
-            self.rotor = self.rotor_instance(rotor0, bearings)
+        # static analysis
+        fig_static = self._plot_static_analysis()
+
+        # loop through bearings clearance
+        for k, bearings in self.config.bearings.__dict__.items():
+            if not isinstance(bearings, Iterable):
+                raise ValueError(
+                    "{} option must be a list of bearing elements".format(k)
+                )
+
+            self.rotor = self._rotor_instance(rotor0, bearings)
 
             # undamped critical speed map
-            fig_ucs.append(self.plot_ucs(stiffness_range=self.bearing_stiffness_range))
+            fig_ucs.append(self._plot_ucs())
 
-            for i, mode in enumerate([0, 2]):
+            # campbell diagram
+            fig_dcs.append(self._plot_campbell_diagram())
+
+            for i, mode in enumerate([1, 3]):
                 # mode shape figures
-                fig_mode_shape.append(self.mode_shape(mode))
+                fig_mode_shape.append(self._mode_shape(mode))
 
                 # unbalance response figures and dataframe
-                fig, _dict = self.unbalance_response(mode)
+                fig, _dict = self._unbalance_response(mode)
                 fig_unbalance.append(fig)
                 df = pd.DataFrame(_dict).astype(object)
                 df_unbalance.append(df)
 
             # stability level 1 figures
-            figs = self.stability_level_1(D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd)
+            figs = self._stability_level_1()
             fig_a_lvl1.append(figs[0])
             fig_b_lvl1.append(figs[1])
 
             # stability level 2 dataframe
-            df_lvl2 = self.stability_level_2()
+            df_lvl2 = self._stability_level_2()
 
             # API summary tables
-            summaries.append(self.summary())
+            summaries.append(self._summary())
 
         df_unbalance = pd.concat(df_unbalance)
 
-        self.rotor = rotor0
+        self.rotor = rotor
 
         return {
+            "fig_static": fig_static,
             "fig_ucs": fig_ucs,
+            "fig_dcs": fig_dcs,
             "fig_mode_shape": fig_mode_shape,
             "fig_unbalance": fig_unbalance,
             "df_unbalance": df_unbalance,
@@ -412,83 +264,10 @@ class Report:
             "summaries": summaries,
         }
 
-    def assets_prep(self, dashboard_data):
+    def _plot_campbell_diagram(self):
+        """Plot Campbell Diagram.
 
-        # Rotor figure
-        plot_rotor = self.rotor.plot_rotor()
-        plot_rotor.layout["height"] = 350
-        plot_rotor.layout["width"] = 750
-
-        plot_rotor.layout["xaxis"]["autorange"] = True
-        plot_rotor.layout["yaxis"]["autorange"] = True
-        plot_rotor.update_layout()
-
-        # Undamped critical speed figure
-        ucs_fig = make_subplots(
-            cols=2,
-            rows=1,
-            x_title="Bearing Stiffness",
-            y_title="Critical Speed",
-            subplot_titles=["Undamped Critical Speed Map", "", "", ""],
-        )
-
-        ucs_row = 1
-        ucs_col = 1
-        for fig in dashboard_data["fig_ucs"]:
-            for j in fig.data:
-                ucs_fig.add_trace(j, row=ucs_row, col=ucs_col)
-            if ucs_col == 1:
-                ucs_col = 2
-
-        ucs_fig.layout["height"] = 350
-        ucs_fig.layout["width"] = 750
-        ucs_fig.update_layout()
-
-        # Undamped mode shape
-        mode_fig = make_subplots(
-            cols=2,
-            rows=2,
-            x_title="Rotor length",
-            y_title="Non dimensional deformation",
-            subplot_titles=["Undamped Mode Shape", "", "", ""],
-        )
-        mode_row = 1
-        mode_col = 1
-
-        for fig in dashboard_data["fig_mode_shape"]:
-            for j in fig.data:
-                mode_fig.add_trace(j, row=mode_row, col=mode_col)
-            if mode_col == 1:
-                mode_col = 2
-            else:
-                mode_row = 2
-                mode_col = 1
-
-        mode_fig.layout["height"] = 750
-        mode_fig.layout["width"] = 750
-        mode_fig.update_layout()
-
-        figs = plot_rotor, ucs_fig, mode_fig
-        html_figs = []
-        for fig in figs:
-            html_figs.append(fig.to_html(full_html=False))
-
-        return {"figs": figs, "html_figs": html_figs}
-
-    def plot_ucs(self, stiffness_range=None, num=20):
-        """Plot undamped critical speed map.
-
-        This method will plot the undamped critical speed map for a given range
-        of stiffness values. If the range is not provided, the bearing
-        stiffness at rated speed will be used to create a range.
-
-        Parameters
-        ----------
-        stiffness_range : tuple, optional
-            Tuple with (start, end) for stiffness range.
-        num : int
-            Number of steps in the range.
-            Default is 20.
+        This function will calculate the damped natural frequencies for a speed range.
 
         Returns
         -------
@@ -497,152 +276,75 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> fig = report.plot_ucs(stiffness_range=(5, 8))
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_campbell_diagram()
         """
-        if stiffness_range is None:
-            if self.rotor.rated_w is not None:
-                bearing = self.rotor.bearing_elements[0]
-                k = bearing.kxx.interpolated(self.rotor.rated_w)
-                k = int(np.log10(k))
-                stiffness_range = (k - 3, k + 3)
-            else:
-                stiffness_range = (6, 11)
+        fig = self.rotor.run_campbell(
+            speed_range=self.config.run_campbell.speed_range,
+            frequencies=self.config.run_campbell.frequencies,
+        ).plot(harmonics=self.config.run_campbell.harmonics)
 
-        stiffness_log = np.logspace(*stiffness_range, num=num)
-        rotor_wn = np.zeros((4, len(stiffness_log)))
+        return fig
 
-        bearings_elements = []  # exclude the seals
-        for bearing in self.rotor.bearing_elements:
-            if not isinstance(bearing, SealElement):
-                bearings_elements.append(bearing)
+    def _plot_static_analysis(self):
+        """Run static analysis.
 
-        for i, k in enumerate(stiffness_log):
-            bearings = [BearingElement(b.n, kxx=k, cxx=0) for b in bearings_elements]
-            rotor = self.rotor.__class__(
-                self.rotor.shaft_elements, self.rotor.disk_elements, bearings
-            )
-            modal = rotor.run_modal(speed=0, num_modes=16)
-            rotor_wn[:, i] = modal.wn[:8:2]
+        Static analysis calculates free-body diagram, deformed shaft, shearing
+        force diagram and bending moment diagram.
 
-        bearing0 = bearings_elements[0]
+        Returns
+        -------
+        figs : list
+            list of Plotly graph_objects.Figure() from Rotor.run_static()
 
-        fig = go.Figure()
+        Example
+        -------
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_static_analysis()
+        """
+        static = self.rotor.run_static()
 
-        fig.add_trace(
-            go.Scatter(
-                x=bearing0.kxx.interpolated(bearing0.frequency),
-                y=bearing0.frequency,
-                mode="markers",
-                marker=dict(size=10, symbol="circle", color="#888844"),
-                name="Kxx",
-                hovertemplate=("Kxx: %{x:.2e}<br>" + "Frequency: %{y:.2f}"),
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=bearing0.kyy.interpolated(bearing0.frequency),
-                y=bearing0.frequency,
-                mode="markers",
-                marker=dict(size=10, symbol="square", color="#888844"),
-                name="Kyy",
-                hovertemplate=("Kyy: %{x:.2e}<br>" + "Frequency: %{y:.2f}"),
-            )
-        )
+        figs = [
+            static.plot_free_body_diagram(),
+            static.plot_deformation(),
+            static.plot_shearing_force(),
+            static.plot_bending_moment(),
+        ]
 
-        # Speeds References
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.maxspeed] * num,
-                mode="lines",
-                line=dict(dash="dot", width=4, color=colors2[8]),
-                name="MCS Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.minspeed] * num,
-                mode="lines",
-                line=dict(dash="dash", width=4, color=colors2[8]),
-                name="MOS Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.tripspeed] * num,
-                mode="lines",
-                line=dict(dash="dashdot", width=4, color=colors2[8]),
-                name="Trip Speed",
-                hoverinfo="none",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=stiffness_log,
-                y=[self.speed_factor * self.tripspeed] * num,
-                mode="lines",
-                line=dict(dash="longdash", width=4, color=colors2[8]),
-                name="{}% Trip Speed".format(100 * self.speed_factor),
-                hoverinfo="none",
-            )
-        )
-        for j in range(rotor_wn.T.shape[1]):
-            fig.add_trace(
-                go.Scatter(
-                    x=stiffness_log,
-                    y=np.transpose(rotor_wn.T)[j],
-                    mode="lines",
-                    line=dict(width=4, color=colors1[j]),
-                    hoverinfo="none",
-                    showlegend=False,
-                )
-            )
-        fig.update_xaxes(
-            title_text="<b>Bearing Stiffness</b>",
-            title_font=dict(size=16),
-            tickfont=dict(size=14),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-            type="log",
-            exponentformat="power",
-        )
-        fig.update_yaxes(
-            title_text="<b>Critical Speed</b>",
-            title_font=dict(size=16),
-            tickfont=dict(size=14),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-            type="log",
-            exponentformat="power",
-        )
-        fig.update_layout(
-            width=800,
-            height=600,
-            plot_bgcolor="white",
-            legend=dict(
-                font=dict(family="sans-serif", size=14),
-                bgcolor="white",
-                bordercolor="black",
-                borderwidth=2,
-            ),
-            title=dict(text="<b>Undamped Critical Speed Map</b>", font=dict(size=16)),
+        return figs
+
+    def _plot_ucs(self):
+        """Plot undamped critical speed map.
+
+        This method will plot the undamped critical speed map for a given range
+        of stiffness values. If the range is not provided, the bearing
+        stiffness at rated speed will be used to create a range.
+
+        Returns
+        -------
+        fig : Plotly graph_objects.Figure()
+            The figure object with the plot.
+
+        Example
+        -------
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_ucs()
+        """
+        fig = self.rotor.plot_ucs(
+            stiffness_range=self.config.plot_ucs.stiffness_range,
+            num_modes=self.config.plot_ucs.num_modes,
+            num=self.config.plot_ucs.num,
+            synchronous=self.config.plot_ucs.synchronous,
+            stiffness_units=self.config.plot_ucs.stiffness_units,
+            frequency_units=self.config.plot_ucs.frequency_units,
         )
 
         return fig
 
-    def static_forces(self):
+    def _static_forces(self):
         """Calculate the bearing reaction forces.
 
         Returns
@@ -652,9 +354,9 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> report.static_forces()
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> report._static_forces()
         array([44.09320349, 44.09320349])
         """
         # get reaction forces on bearings
@@ -664,7 +366,7 @@ class Report:
 
         return Fb
 
-    def unbalance_forces(self, mode):
+    def _unbalance_forces(self, mode):
         """Calculate the unbalance forces.
 
         The unbalance forces are calculated base on the rotor type:
@@ -687,32 +389,35 @@ class Report:
 
         Returns
         -------
-        U : list
+        force : list
             Unbalancing forces.
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> report.unbalance_forces(mode=0)
-        [58.641354289961676]
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> report._unbalance_forces(mode=0)
+        array([0.04479869])
         """
+        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
+            N = self.config.rotor_properties.rotor_speeds.max_speed
+        elif self.config.rotor_properties.rotor_speeds.unit == "rad/s":
+            N = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
+
         if mode > 3:
             raise ValueError(
                 "This module calculates only the response for the first "
                 "two backward and forward modes. "
             )
 
-        N = 60 * self.maxspeed / (2 * np.pi)
-
         # get reaction forces on bearings
         if self.rotor_type == "between_bearings":
-            Fb = self.static_forces()
+            Fb = self._static_forces()
             if mode == 0 or mode == 1:
-                U_force = [max(6350 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
+                force = [max(6350e-6 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
 
             if mode == 2 or mode == 3:
-                U_force = [max(6350 * f / N, 254e-6 * f) for f in Fb]
+                force = [max(6350e-6 * f / N, 254e-6 * f) for f in Fb]
 
         # get disk masses
         elif self.rotor_type == "single_overhung_l":
@@ -728,7 +433,7 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            U_force = [6350 * W3 / N]
+            force = [6350e-6 * W3 / N]
 
         elif self.rotor_type == "single_overhung_r":
             Wd = [
@@ -743,7 +448,7 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            U_force = [6350 * W3 / N]
+            force = [6350e-6 * W3 / N]
 
         elif self.rotor_type == "double_overhung":
             Wd_l = [
@@ -768,13 +473,13 @@ class Report:
             ]
             W3 = np.array([np.sum(Wd_l + Ws_l), np.sum(Wd_r + Ws_r)])
 
-            U_force = 6350 * W3 / N
+            force = 6350e-6 * W3 / N
 
-        self.U_force = U_force
+        force = 2 * np.array(force)
 
-        return U_force
+        return force
 
-    def unbalance_response(self, mode, samples=201):
+    def _unbalance_response(self, mode):
         """Evaluate the unbalance response for the rotor.
 
         This analysis takes the critical speeds of interest, calculates the
@@ -808,21 +513,31 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> fig, unbalance_dict = report.unbalance_response(mode=0)
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig, unbalance_dict = report._unbalance_response(mode=0)
         """
-        maxspeed = self.maxspeed
-        minspeed = self.minspeed
-        freq_range = np.linspace(0, self.speed_factor * maxspeed, 201)
+        maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
+        minspeed = self.config.rotor_properties.rotor_speeds.min_speed
+        speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
+
+        freq_range = self.config.run_unbalance_response.frequency_range
+        modes = self.config.run_unbalance_response.modes
+        cluster_points = self.config.run_unbalance_response.cluster_points
+        num_modes = self.config.run_unbalance_response.num_modes
+        num_points = self.config.run_unbalance_response.num_points
+        rtol = self.config.run_unbalance_response.rtol
+
+        if freq_range is None and not cluster_points:
+            freq_range = np.linspace(0, speed_factor * maxspeed, 201)
 
         # returns de nodes where forces will be applied
-        self.mode_shape(mode)
+        self._mode_shape(mode)
         node_min = self.node_min
         node_max = self.node_max
         nodes = [int(node) for sub_nodes in [node_min, node_max] for node in sub_nodes]
 
-        force = self.unbalance_forces(mode)
+        _magnitude = self._unbalance_forces(mode)
 
         phase = []
         phase_angle = 0
@@ -830,194 +545,164 @@ class Report:
             phase.append(phase_angle)
             phase_angle += np.pi
 
-        unbalance_dict = {
-            "Mode": mode + 1,
-            "Frequency": [],
-            "Amplification factor": [],
-            "Separation margin - ACTUAL": [],
-            "Separation margin - REQUIRED": [],
-            "Unbalance station(s)": [nodes],
-            "Unbalance weight(s)": [force],
-            "Unbalance phase(s)": [phase],
-        }
+        # fmt: off
+        response = self.rotor.run_unbalance_response(
+            nodes, _magnitude, phase, freq_range, modes,
+            cluster_points, num_modes, num_points, rtol,
+        )
+        # fmt: on
 
-        response = self.rotor.run_unbalance_response(nodes, force, phase, freq_range)
         mag = response.magnitude
 
-        for node in nodes:
-            dof = 4 * node + 1
-            mag_plot = response.plot_magnitude(dof)
-            phs_plot = response.plot_phase(dof)
+        plot = make_subplots(
+            rows=2, cols=2, specs=[[{}, {"type": "polar", "rowspan": 2}], [{}, None]]
+        )
 
-        magnitude = mag[dof]
-        idx_max = argrelextrema(magnitude, np.greater)[0].tolist()
-        wn = freq_range[idx_max]
+        probe_nodes = self.config.run_unbalance_response.probes.node
+        probe_orientations = self.config.run_unbalance_response.probes.orientation
+        unbalance_dict = {
+            "probe {}".format(i + 1): None for i in range(len(probe_nodes))
+        }
 
-        for i, peak in enumerate(magnitude[idx_max]):
-            peak_n = 0.707 * peak
-            peak_aux = np.linspace(peak_n, peak_n, len(freq_range))
+        k = 0
+        for n, o in zip(probe_nodes, probe_orientations):
+            dof = self.rotor.number_dof * n + 1
+            fig = response.plot(dof)
 
-            idx = np.argwhere(np.diff(np.sign(peak_aux - magnitude))).flatten()
-            idx = np.sort(np.append(idx, idx_max[i]))
+            for j, data in enumerate(fig["data"]):
+                data.line.color = list(tableau_colors)[k]
+                data.marker.color = list(tableau_colors)[k]
+                data.name = "Probe Node {}".format(n)
+                data.legendgroup = "Probe Node {}".format(n)
+                data.showlegend = True if j == 0 else False
+                plot.add_trace(data)
 
-            # if speed range is not long enough to catch the magnitudes
-            try:
-                idx_aux = [
-                    list(idx).index(idx_max[i]) - 1,
-                    list(idx).index(idx_max[i]) + 1,
-                ]
-                idx = idx[idx_aux]
-            except IndexError:
-                idx = [list(idx).index(idx_max[i]) - 1, len(freq_range) - 1]
+            plot.update_layout(fig.layout)
 
-            # Amplification Factor (AF) - API684 - SP6.8.2.1
-            AF = wn[i] / (freq_range[idx[1]] - freq_range[idx[0]])
+            _dict = {
+                "Probe node": [n],
+                "Probe orientation": [o],
+                "Critical frequencies": [],
+                "Amplification factor": [],
+                "Separation margin - ACTUAL": [],
+                "Separation margin - REQUIRED": [],
+                "Unbalance station(s)": nodes,
+                "Unbalance weight(s)": _magnitude.tolist(),
+                "Unbalance phase(s)": phase,
+            }
 
-            # Separation Margin (SM) - API684 - SP6.8.2.10
-            if AF > 2.5 and wn[i] < minspeed:
-                SM = min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100
-                SMspeed = wn[i] * (1 + SM)
-                SM_ref = (minspeed - wn[i]) / wn[i]
+            magnitude = mag[dof]
+            idx_max = argrelextrema(magnitude, np.greater)[0].tolist()
+            wn = freq_range[idx_max]
 
-                hovertemplate = (
-                    f"<b>Critical Speed: {wn[i]:.2f}<b><br>"
-                    + f"<b>Speed at 0.707 x amplitude peak: {SMspeed:.2f}<b><br>"
-                )
-                mag_plot.add_trace(
-                    go.Scatter(
-                        x=[wn[i], SMspeed, SMspeed, wn[i], wn[i]],
-                        y=[0, 0, max(magnitude[idx_max]), max(magnitude[idx_max]), 0],
-                        text=hovertemplate,
-                        mode="lines",
-                        opacity=0.3,
-                        fill="toself",
-                        fillcolor=colors1[3],
-                        line=dict(width=1.5, color=colors1[3]),
-                        showlegend=True if i == 0 else False,
-                        name="Separation Margin",
-                        legendgroup="Separation Margin",
-                        hoveron="points+fills",
-                        hoverinfo="text",
-                        hovertemplate=hovertemplate,
-                        hoverlabel=dict(bgcolor=colors1[3]),
-                    )
-                )
+            for i, peak in enumerate(magnitude[idx_max]):
+                peak_n = 0.707 * peak
+                peak_aux = np.linspace(peak_n, peak_n, len(freq_range))
 
-            elif AF > 2.5 and wn[i] > maxspeed:
-                SM = min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100
-                SMspeed = wn[i] * (1 - SM)
-                SM_ref = (wn[i] - maxspeed) / maxspeed
+                idx = np.argwhere(np.diff(np.sign(peak_aux - magnitude))).flatten()
+                idx = np.sort(np.append(idx, idx_max[i]))
 
-                hovertemplate = (
-                    f"<b>Critical Speed: {wn[i]:.2f}<b><br>"
-                    + f"<b>Speed at 0.707 x amplitude peak: {SMspeed:.2f}<b><br>"
-                )
-                mag_plot.add_trace(
-                    go.Scatter(
-                        x=[SMspeed, wn[i], wn[i], SMspeed, SMspeed],
-                        y=[0, 0, max(magnitude[idx_max]), max(magnitude[idx_max]), 0],
-                        text=hovertemplate,
-                        mode="lines",
-                        opacity=0.3,
-                        fill="toself",
-                        fillcolor=colors1[3],
-                        line=dict(width=1.5, color=colors1[3]),
-                        showlegend=True if i == 0 else False,
-                        name="Separation Margin",
-                        legendgroup="Separation Margin",
-                        hoveron="points+fills",
-                        hoverinfo="text",
-                        hovertemplate=hovertemplate,
-                        hoverlabel=dict(bgcolor=colors1[3]),
-                    )
-                )
+                # if speed range is not long enough to catch the magnitudes
+                try:
+                    idx_aux = [
+                        list(idx).index(idx_max[i]) - 1,
+                        list(idx).index(idx_max[i]) + 1,
+                    ]
+                    idx = idx[idx_aux]
+                except IndexError:
+                    idx = [list(idx).index(idx_max[i]) - 1, len(freq_range) - 1]
 
-            else:
-                SM = None
-                SM_ref = None
-                SMspeed = None
+                # Amplification Factor (AF) - API684 - SP6.8.2.1
+                AF = wn[i] / (freq_range[idx[1]] - freq_range[idx[0]])
 
-            unbalance_dict["Amplification factor"].append(AF)
-            unbalance_dict["Separation margin - ACTUAL"].append(SM)
-            unbalance_dict["Separation margin - REQUIRED"].append(SM_ref)
-            unbalance_dict["Frequency"].append(wn[i])
+                # Separation Margin (SM) - API684 - SP6.8.2.10
+                if AF > 2.5 and wn[i] < minspeed:
+                    SM = min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100
+                    SMspeed = wn[i] * (1 + SM)
+                    SM_ref = (minspeed - wn[i]) / wn[i]
 
-        # amplitude limit in micrometers (A1) - API684 - SP6.8.2.11
-        A1 = 25.4 * np.sqrt(12000 / (30 * maxspeed / np.pi))
+                elif AF > 2.5 and wn[i] > maxspeed:
+                    SM = min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100
+                    SMspeed = wn[i] * (1 - SM)
+                    SM_ref = (wn[i] - maxspeed) / maxspeed
 
-        Amax = max(mag[dof])
+                else:
+                    SM = "None"
+                    SM_ref = "None"
+                    SMspeed = "None"
 
-        # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
-        Scc = max(A1 / Amax, 0.5)
-        Scc = min(Scc, 6.0)
+                _dict["Amplification factor"].append(AF)
+                _dict["Separation margin - ACTUAL"].append(SM)
+                _dict["Separation margin - REQUIRED"].append(SM_ref)
+                _dict["Critical frequencies"].append(wn[i])
 
-        mag_plot.add_trace(
-            go.Scatter(
-                x=[minspeed, maxspeed, maxspeed, minspeed, minspeed],
-                y=[0, 0, max(mag[dof]), max(mag[dof]), 0],
-                text="Operation Speed Range",
-                mode="lines",
-                opacity=0.3,
-                fill="toself",
-                fillcolor=colors1[2],
-                line=dict(width=1.5, color=colors1[2]),
-                name="Operation Speed Range",
-                legendgroup="Operation Speed Range",
-                hoveron="points+fills",
-                hoverinfo="text",
-                hoverlabel=dict(bgcolor=colors1[2]),
+            unbalance_dict["probe {}".format(k + 1)] = _dict
+
+            # amplitude limit (A1) - API684 - SP6.8.2.11
+            A1 = 25.4 * np.sqrt(12000 / (30 * maxspeed / np.pi)) * 1e-6
+
+            Amax = max(mag[dof])
+
+            # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
+            Scc = max(A1 / Amax, 0.5)
+            Scc = min(Scc, 6.0)
+
+            customdata = [minspeed, maxspeed]
+            plot.add_trace(
+                go.Scatter(
+                    x=[minspeed, maxspeed, maxspeed, minspeed, minspeed],
+                    y=[0, 0, max(mag[dof]), max(mag[dof]), 0],
+                    customdata=customdata * 5,
+                    mode="lines",
+                    opacity=0.3,
+                    fill="toself",
+                    fillcolor=tableau_colors["green"],
+                    line=dict(width=1.5, color=tableau_colors["green"]),
+                    name="Operation Speed Range",
+                    legendgroup="Operation Speed Range",
+                    hoveron="points+fills",
+                    showlegend=True if i == 0 else False,
+                    hoverlabel=dict(bgcolor=tableau_colors["green"]),
+                    hovertemplate=(
+                        f"<b>min. speed: {customdata[0]:.1f}</b><br>"
+                        + f"<b>max. speed: {customdata[1]:.1f}</b>"
+                    ),
+                ),
+                row=1,
+                col=1,
             )
-        )
-        mag_plot.add_trace(
-            go.Scatter(
-                x=[minspeed, maxspeed],
-                y=[A1, A1],
-                mode="lines",
-                line=dict(width=2.0, color=colors1[5], dash="dashdot"),
-                name="Av1 - Mechanical test vibration limit",
-                hoverinfo="none",
+            plot.add_trace(
+                go.Scatter(
+                    x=[minspeed, maxspeed],
+                    y=[A1, A1],
+                    mode="lines",
+                    line=dict(width=2.0, color="black", dash="dashdot"),
+                    name="Av1 - Mechanical test vibration limit",
+                    showlegend=True if i == 0 else False,
+                    hoverinfo="none",
+                ),
+                row=1,
+                col=1,
             )
-        )
-        mag_plot.add_annotation(
-            x=(minspeed + maxspeed) / 2,
-            y=A1,
-            axref="x",
-            ayref="y",
-            xshift=0,
-            yshift=10,
-            text="<b>Av1</b>",
-            font=dict(size=18),
-            showarrow=False,
-        )
-        mag_plot["data"][0]["line"] = dict(width=4.0, color=colors1[5])
-        phs_plot["data"][0]["line"] = dict(width=4.0, color=colors1[5])
+            plot.add_annotation(
+                x=(minspeed + maxspeed) / 2,
+                y=A1,
+                axref="x",
+                ayref="y",
+                xshift=0,
+                yshift=10,
+                text="<b>Av1</b>",
+                font=dict(size=18),
+                showarrow=False,
+                row=1,
+                col=1,
+            )
 
-        subplots = make_subplots(rows=2, cols=1)
-        for data in mag_plot["data"]:
-            subplots.add_trace(data, row=1, col=1)
-        for data in phs_plot["data"]:
-            subplots.add_trace(data, row=2, col=1)
+            k += 1
 
-        subplots.update_xaxes(mag_plot.layout.xaxis, row=1, col=1)
-        subplots.update_yaxes(mag_plot.layout.yaxis, row=1, col=1)
-        subplots.update_xaxes(phs_plot.layout.xaxis, row=2, col=1)
-        subplots.update_yaxes(phs_plot.layout.yaxis, row=2, col=1)
-        subplots.update_layout(
-            width=1800,
-            height=900,
-            plot_bgcolor="white",
-            hoverlabel_align="right",
-            legend=dict(
-                itemsizing="constant",
-                bgcolor="white",
-                borderwidth=2,
-                font=dict(size=14),
-            ),
-        )
+        return plot, unbalance_dict
 
-        return subplots, unbalance_dict
-
-    def mode_shape(self, mode):
+    def _mode_shape(self, mode):
         """Evaluate the mode shapes for the rotor.
 
         This analysis presents the vibration mode for each critical speed.
@@ -1044,9 +729,9 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> fig = report.mode_shape(mode=0)
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._mode_shape(mode=0)
         >>> report.node_min
         array([], dtype=float64)
         >>> report.node_max
@@ -1055,8 +740,9 @@ class Report:
         nodes_pos = self.rotor.nodes_pos
         df_bearings = self.rotor.df_bearings
         df_disks = self.rotor.df_disks
+        speed = self.config.rotor_properties.rotor_speeds.oper_speed
 
-        modal = self.rotor.run_modal(speed=self.maxspeed)
+        modal = self.rotor.run_modal(speed=speed)
         xn, yn, zn, xc, yc, zc_pos, nn = modal.calc_mode_shape(mode=mode)
 
         # reduce 3D view to 2D view
@@ -1124,35 +810,11 @@ class Report:
             node_max = [max(df_disks["n"])]
 
         nodes_pos = np.array(nodes_pos)
-        rpm_speed = (30 / np.pi) * modal.wn[mode]
 
         self.node_min = node_min
         self.node_max = node_max
 
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=zn,
-                y=vn,
-                mode="lines",
-                line=dict(width=4, color=colors1[3]),
-                name="<b>Mode {}</b><br><b>Speed = {:.1f} RPM</b>".format(
-                    mode, rpm_speed
-                ),
-                hovertemplate="Axial position: %{x:.2f}<br>Deformation: %{y:.2f}",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=nodes_pos,
-                y=np.zeros(len(nodes_pos)),
-                mode="lines",
-                line=dict(width=4, color=colors1[5], dash="dashdot"),
-                name="centerline",
-                hoverinfo="none",
-                showlegend=False,
-            )
-        )
+        fig = modal.plot_mode_2d(frequency_units=self.config.mode_shape.frequency_units)
         fig.add_trace(
             go.Scatter(
                 x=nodes_pos[df_bearings["n"]],
@@ -1193,40 +855,11 @@ class Report:
                 )
             )
 
-        fig.update_xaxes(
-            title_text="<b>Rotor lenght</b>",
-            title_font=dict(family="Arial", size=20),
-            tickfont=dict(size=16),
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-        )
-        fig.update_yaxes(
-            title_text="<b>Non dimensional deformation</b>",
-            title_font=dict(family="Arial", size=20),
-            tickfont=dict(size=16),
-            range=[-2, 2],
-            gridcolor="lightgray",
-            showline=True,
-            linewidth=2.5,
-            linecolor="black",
-            mirror=True,
-        )
-        fig.update_layout(
-            width=1200,
-            height=900,
-            plot_bgcolor="white",
-            hoverlabel_align="right",
-            title=dict(
-                text="<b>Undamped Mode Shape</b>".format(node), font=dict(size=20)
-            ),
-        )
+        fig.update_yaxes(range=[-2, 2])
 
         return fig
 
-    def stability_level_1(self, D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd, unit="m"):
+    def _stability_level_1(self):
         """Stability analysis level 1.
 
         This analysis consider a anticipated cross coupling QA based on
@@ -1235,30 +868,6 @@ class Report:
 
         Components such as seals and impellers are not considered in this
         analysis.
-
-        Parameters
-        ----------
-        D: list
-            Impeller diameter, m (in.),
-            Blade pitch diameter, m (in.),
-        H: list
-            Minimum diffuser width per impeller, m (in.),
-            Effective blade height, m (in.),
-        HP: list
-            Rated power per stage/impeller, W (HP),
-        oper_speed: float
-            Operating speed, rpm,
-        RHO_ratio: list
-            Density ratio between the discharge gas density and the suction
-            gas density per impeller (RHO_discharge / RHO_suction),
-            kg/m3 (lbm/in.3),
-        RHOs: float
-            Suction gas density in the first stage, kg/m3 (lbm/in.3).
-        RHOd: float
-            Discharge gas density in the last stage, kg/m3 (lbm/in.3),
-        unit: str, optional
-            Adopted unit system. Options are "m" (meter) and "in" (inch)
-            Default is "m"
 
         Attributes
         ----------
@@ -1275,49 +884,66 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> fig1, fig2 = report.stability_level_1(D=[0.35, 0.35],
-        ...                                       H=[0.08, 0.08],
-        ...                                       HP=[10000, 10000],
-        ...                                       RHO_ratio=[1.11, 1.14],
-        ...                                       RHOd=30.45,
-        ...                                       RHOs=37.65,
-        ...                                       oper_speed=1000.0)
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig1, fig2 = report._stability_level_1()
         >>> report.Qa
-        23022.32142857143
+        28777.90178571429
         """
+        D = self.config.stability_level1.D
+        H = self.config.stability_level1.H
+        HP = self.config.stability_level1.rated_power
+        rho_ratio = self.config.stability_level1.rho_ratio
+        RHOs = self.config.stability_level1.rho_suction
+        RHOd = self.config.stability_level1.rho_discharge
+        unit = self.config.stability_level1.unit
+
+        machine_type = self.config.rotor_properties.rotor_id.type
+
+        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
+            speed = self.config.rotor_properties.rotor_speeds.oper_speed
+            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
+            self.MCS = maxspeed
+
+        if self.config.rotor_properties.rotor_speeds.unit == "rad/s":
+            speed = self.config.rotor_properties.rotor_speeds.oper_speed * 30 / np.pi
+            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
+            self.MCS = maxspeed
+
         steps = 11
-        if unit == "m":
+        if self.config.stability_level1.unit == "m":
             C = 9.55
-        elif unit == "in":
+        elif self.config.stability_level1.unit == "in":
             C = 63.0
         else:
-            raise TypeError("choose between meters (m) or inches (in)")
+            raise ValueError("config.stability_level1.unit options are 'm' or 'in'.")
 
         if len(D) != len(H):
-            raise Exception("length of D must be the same of H")
+            raise Exception(
+                "config.stability_level1.H and config.stability_level1.D"
+                "must have the same length."
+            )
 
         Qa = 0.0
         cross_coupled_array = np.array([])
         # Qa - Anticipated cross-coupling for compressors - API 684 - SP6.8.5.6
-        if self.machine_type == "compressor":
+        if machine_type == "compressor":
             Bc = 3.0
             Dc, Hc = D, H
             for i, disk in enumerate(self.rotor.disk_elements):
                 if disk.n in self.disk_nodes:
-                    qi = HP[i] * Bc * C * RHO_ratio[i] / (Dc[i] * Hc[i] * oper_speed)
+                    qi = HP[i] * Bc * C * rho_ratio[i] / (Dc[i] * Hc[i] * speed)
                     Qi = np.linspace(0, 10 * qi, steps)
                     cross_coupled_array = np.append(cross_coupled_array, Qi)
                     Qa += qi
 
         # Qa - Anticipated cross-coupling for turbines - API 684 - SP6.8.5.6
-        if self.machine_type == "turbine" or self.machine_type == "axial_flow":
+        if machine_type == "turbine" or machine_type == "axial_flow":
             Bt = 1.5
             Dt, Ht = D, H
             for i, disk in enumerate(self.rotor.disk_elements):
                 if disk.n in self.disk_nodes:
-                    qi = (HP[i] * Bt * C) / (Dt[i] * Ht[i] * oper_speed)
+                    qi = (HP[i] * Bt * C) / (Dt[i] * Ht[i] * speed)
                     Qi = np.linspace(0, 10 * qi, steps)
                     cross_coupled_array = np.append(cross_coupled_array, Qi)
                     Qa += qi
@@ -1348,13 +974,8 @@ class Report:
                 cross_coupling = BearingElement(n=int(n), kxx=0, cxx=0, kxy=Q, kyx=-Q)
                 bearings.append(cross_coupling)
 
-                aux_rotor = Rotor(
-                    shaft_elements=self.rotor.shaft_elements,
-                    disk_elements=[],
-                    bearing_elements=bearings,
-                    rated_w=self.rotor.rated_w,
-                )
-                modal = aux_rotor.run_modal(speed=oper_speed * np.pi / 30)
+                aux_rotor = Rotor(self.rotor.shaft_elements, [], bearings)
+                modal = aux_rotor.run_modal(speed=speed * np.pi / 30)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec[i] = modal.log_dec[non_backward][0]
 
@@ -1367,13 +988,8 @@ class Report:
                     cross_coupling = BearingElement(n=n, kxx=0, cxx=0, kxy=q, kyx=-q)
                     bearings.append(cross_coupling)
 
-                aux_rotor = Rotor(
-                    shaft_elements=self.rotor.shaft_elements,
-                    disk_elements=[],
-                    bearing_elements=bearings,
-                    rated_w=self.rotor.rated_w,
-                )
-                modal = aux_rotor.run_modal(speed=oper_speed * np.pi / 30)
+                aux_rotor = Rotor(self.rotor.shaft_elements, [], bearings)
+                modal = aux_rotor.run_modal(speed=speed * np.pi / 30)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec[i] = modal.log_dec[non_backward][0]
 
@@ -1398,8 +1014,8 @@ class Report:
         log_dec_a = log_dec[np.where(cross_coupled_Qa == Qa)][0]
 
         # CSR - Critical Speed Ratio
-        crit_speed = self.rotor.run_modal(speed=self.maxspeed).wn[0]
-        CSR = self.maxspeed / crit_speed
+        crit_speed = self.rotor.run_modal(speed=maxspeed * np.pi / 30).wn[0]
+        CSR = maxspeed * (np.pi / 30) / crit_speed
 
         # RHO_mean - Average gas density
         RHO_mean = (RHOd + RHOs) / 2
@@ -1413,7 +1029,6 @@ class Report:
         )
 
         # Plotting area
-
         fig1 = go.Figure()
 
         fig1.add_trace(
@@ -1545,20 +1160,20 @@ class Report:
         # Level 1 screening criteria - API 684 - SP6.8.5.10
         idx = min(range(len(RHO)), key=lambda i: abs(RHO[i] - RHO_mean))
 
-        if self.machine_type == "compressor":
+        if machine_type == "compressor":
             if Q0 / Qa < 2.0:
                 condition = True
 
-            if log_dec_a < 0.1:
+            elif log_dec_a < 0.1:
                 condition = True
 
-            if 2.0 < Q0 / Qa < 10.0 and CSR > CSR_boundary[idx]:
+            elif 2.0 < Q0 / Qa < 10.0 and CSR > CSR_boundary[idx]:
                 condition = True
 
             else:
                 condition = False
 
-        if self.machine_type == "turbine" or self.machine_type == "axial flow":
+        if machine_type == "turbine" or machine_type == "axial flow":
             if log_dec_a < 0.1:
                 condition = True
 
@@ -1572,13 +1187,12 @@ class Report:
         self.CSR = CSR
         self.Qratio = Q0 / Qa
         self.crit_speed = crit_speed
-        self.MCS = self.maxspeed
-        self.RHO_gas = RHO_mean
+        self.rho_gas = RHO_mean
         self.condition = condition
 
         return fig1, fig2
 
-    def stability_level_2(self):
+    def _stability_level_2(self):
         """Stability analysis level 2.
 
         For the level 2 stability analysis additional sources that contribute
@@ -1595,10 +1209,12 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> dataframe = report.stability_level_2()
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> dataframe = report._stability_level_2()
         """
+        oper_speed = self.config.rotor_properties.rotor_speeds.oper_speed
+
         # Build a list of seals
         seal_list = [
             copy(b) for b in self.rotor.bearing_elements if isinstance(b, SealElement)
@@ -1624,9 +1240,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[disk],
                     bearing_elements=bearing_list,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_disk.append(modal.log_dec[non_backward][0])
 
@@ -1646,9 +1261,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=self.rotor.disk_elements,
                     bearing_elements=bearing_list,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_disk.append(modal.log_dec[non_backward][0])
 
@@ -1664,9 +1278,8 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[],
                     bearing_elements=bearings_seal,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_seal.append(modal.log_dec[non_backward][0])
 
@@ -1681,16 +1294,15 @@ class Report:
                     shaft_elements=self.rotor.shaft_elements,
                     disk_elements=[],
                     bearing_elements=self.rotor.bearing_elements,
-                    rated_w=self.maxspeed,
                 )
-                modal = aux_rotor.run_modal(speed=self.maxspeed)
+                modal = aux_rotor.run_modal(speed=oper_speed)
                 non_backward = modal.whirl_direction() != "Backward"
                 log_dec_seal.append(modal.log_dec[non_backward][0])
 
             data_seal = {"tags": seal_tags, "log_dec": log_dec_seal}
 
         # Evaluate log dec for all components
-        modal = self.rotor.run_modal(speed=self.maxspeed)
+        modal = self.rotor.run_modal(speed=oper_speed)
         non_backward = modal.whirl_direction() != "Backward"
         log_dec_full.append(modal.log_dec[non_backward][0])
         rotor_tags = [self.tag]
@@ -1710,7 +1322,7 @@ class Report:
 
         return df_logdec
 
-    def summary(self):
+    def _summary(self):
         """Return datarfreames for Report summary.
 
         This method will create dataframes with relevant info about the report.
@@ -1724,21 +1336,17 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> stability1 = report.stability_level_1(D=[0.35, 0.35],
-        ...                          H=[0.08, 0.08],
-        ...                          HP=[10000, 10000],
-        ...                          RHO_ratio=[1.11, 1.14],
-        ...                          RHOd=30.45,
-        ...                          RHOs=37.65,
-        ...                          oper_speed=1000.0)
-        >>> stability2 = report.stability_level_2()
-        >>> df_lvl1, df_lvl2 = report.summary()
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> stability1 = report._stability_level_1()
+        >>> stability2 = report._stability_level_2()
+        >>> df_lvl1, df_lvl2 = report._summary()
         """
+        machine_type = self.config.rotor_properties.rotor_id.type
+
         stab_lvl1_data = dict(
             tags=[self.tag],
-            machine_type=[self.machine_type],
+            machine_type=[machine_type],
             Q0=[self.Q0],
             Qa=[self.Qa],
             log_dec_a=[self.log_dec_a],
@@ -1746,7 +1354,7 @@ class Report:
             crti_speed=[self.crit_speed],
             MCS=[self.MCS],
             CSR=[self.CSR],
-            RHO_gas=[self.RHO_gas],
+            RHO_gas=[self.rho_gas],
         )
         stab_lvl2_data = dict(
             tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
@@ -1757,7 +1365,7 @@ class Report:
 
         return df_stab_lvl1, df_stab_lvl2
 
-    def plot_summary(self):
+    def _plot_summary(self):
         """Plot the report .
 
         This method will create tables to be presented in the report.
@@ -1769,19 +1377,13 @@ class Report:
 
         Example
         -------
-        >>> import ross as rs
-        >>> report = rs.report_example()
-        >>> stability1 = report.stability_level_1(D=[0.35, 0.35],
-        ...                          H=[0.08, 0.08],
-        ...                          HP=[10000, 10000],
-        ...                          RHO_ratio=[1.11, 1.14],
-        ...                          RHOd=30.45,
-        ...                          RHOs=37.65,
-        ...                          oper_speed=1000.0)
-        >>> stability2 = report.stability_level_2()
-        >>> table = report.plot_summary()
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> stability1 = report._stability_level_1()
+        >>> stability2 = report._stability_level_2()
+        >>> table = report._plot_summary()
         """
-        stab_lvl1_data, stab_lvl2_data = self.summary()
+        stab_lvl1_data, stab_lvl2_data = self._summary()
         for var in stab_lvl1_data.columns[2:]:
             stab_lvl1_data[str(var)] = np.round(stab_lvl1_data[str(var)], 3)
 
@@ -1869,13 +1471,15 @@ def report_example():
     -------
     An instance of a report object.
 
-    Examples
-    --------
-    >>> import ross as rs
-    >>> report = rs.report_example()
+    Example
+    -------
+    >>> import report as rp
+    >>> report = rp.report_example()
     >>> report.rotor_type
     'between_bearings'
     """
+    from report.config import Config
+
     i_d = 0
     o_d = 0.05
     n = 6
@@ -1906,6 +1510,7 @@ def report_example():
     freq = [400, 800, 1200, 1600]
     bearing0 = BearingElement(0, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
     bearing1 = BearingElement(6, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
+    oper_clerance_brg = [bearing0, bearing1]
 
     rotor = Rotor(shaft_elem, [disk0, disk1], [bearing0, bearing1])
 
@@ -1925,12 +1530,40 @@ def report_example():
     bearing1 = BearingElement(6, kxx=stfx, cxx=dampx, frequency=freq)
     max_clearance_brg = [bearing0, bearing1]
 
-    bearings = [min_clearance_brg, max_clearance_brg]
-    return Report(
-        rotor=rotor,
-        speed_range=(400, 1000),
-        tripspeed=1200,
-        bearing_stiffness_range=(5, 8),
-        bearing_clearance_lists=bearings,
-        speed_units="rad/s",
+    config = Config()
+    config.update_config(
+        rotor_properties={
+            "rotor_speeds": {
+                "min_speed": 400,
+                "max_speed": 1000,
+                "oper_speed": 800,
+                "trip_speed": 1200,
+            }
+        },
+        bearings={
+            "oper_clearance": oper_clerance_brg,
+            "min_clearance": min_clearance_brg,
+            "max_clearance": max_clearance_brg,
+        },
+        run_campbell={"speed_range": np.linspace(0, 1500, 51)},
+        run_unbalance_response={
+            "probes": {
+                "node": [1, 4],
+                "orientation": [np.pi / 2, np.pi / 2],
+                "unit": "rad",
+            },
+            "frequency_range": np.linspace(0, 1500, 201),
+        },
+        plot_ucs={"stiffness_range": (5, 8)},
+        stability_level1={
+            "D": [0.35, 0.35],
+            "H": [0.08, 0.08],
+            "rated_power": [10000, 10000],
+            "rho_ratio": [1.11, 1.14],
+            "rho_suction": 30.45,
+            "rho_discharge": 37.65,
+            "unit": "m",
+        },
     )
+
+    return Report(rotor, config)
