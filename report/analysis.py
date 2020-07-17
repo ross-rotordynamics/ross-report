@@ -16,6 +16,8 @@ from ross.materials import steel
 from ross.plotly_theme import tableau_colors
 from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
+from ross.units import Q_
+
 
 # fmt: on
 
@@ -218,7 +220,7 @@ class Report:
                     "{} option must be a list of bearing elements".format(k)
                 )
 
-            self.rotor = self._rotor_instance(rotor0, bearings)
+            self.rotor = self._rotor_instance(rotor, bearings)
 
             # undamped critical speed map
             fig_ucs.append(self._plot_ucs())
@@ -228,7 +230,7 @@ class Report:
 
             for i, mode in enumerate([1, 3]):
                 # mode shape figures
-                fig_mode_shape.append(self._mode_shape(mode))
+                fig_mode_shape.append(self._plot_mode_shape(mode))
 
                 # unbalance response figures and dataframe
                 fig, _dict = self._unbalance_response(mode)
@@ -399,10 +401,9 @@ class Report:
         >>> report._unbalance_forces(mode=0)
         array([0.04479869])
         """
-        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
-            N = self.config.rotor_properties.rotor_speeds.max_speed
-        elif self.config.rotor_properties.rotor_speeds.unit == "rad/s":
-            N = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
+        N = self.config.rotor_properties.rotor_speeds.max_speed
+        unit = self.config.rotor_properties.rotor_speeds.unit
+        N = Q_(N, unit).to("rpm").m
 
         if mode > 3:
             raise ValueError(
@@ -414,7 +415,10 @@ class Report:
         if self.rotor_type == "between_bearings":
             Fb = self._static_forces()
             if mode == 0 or mode == 1:
-                force = [max(6350e-6 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
+                if N < 25.000:
+                    force = [max(6350e-6 * np.sum(Fb) / N, 254e-6 * np.sum(Fb))]
+                else:
+                    force = [max(6350e-6 * np.sum(Fb) / 25000, 254e-6 * np.sum(Fb))]
 
             if mode == 2 or mode == 3:
                 force = [max(6350e-6 * f / N, 254e-6 * f) for f in Fb]
@@ -433,7 +437,10 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            force = [6350e-6 * W3 / N]
+            if N < 25.000:
+                force = [6350e-6 * W3 / N]
+            else:
+                force = [6350e-6 * W3 / 25000]
 
         elif self.rotor_type == "single_overhung_r":
             Wd = [
@@ -448,7 +455,10 @@ class Report:
             ]
             W3 = np.sum(Wd + Ws)
 
-            force = [6350e-6 * W3 / N]
+            if N < 25.000:
+                force = [6350e-6 * W3 / N]
+            else:
+                force = [6350e-6 * W3 / 25000]
 
         elif self.rotor_type == "double_overhung":
             Wd_l = [
@@ -473,7 +483,10 @@ class Report:
             ]
             W3 = np.array([np.sum(Wd_l + Ws_l), np.sum(Wd_r + Ws_r)])
 
-            force = 6350e-6 * W3 / N
+            if N < 25.000:
+                force = 6350e-6 * W3 / N
+            else:
+                force = 6350e-6 * W3 / 25000
 
         force = 2 * np.array(force)
 
@@ -520,6 +533,7 @@ class Report:
         maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
         minspeed = self.config.rotor_properties.rotor_speeds.min_speed
         speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
+        speed_unit = self.config.rotor_properties.rotor_speeds.unit
 
         freq_range = self.config.run_unbalance_response.frequency_range
         modes = self.config.run_unbalance_response.modes
@@ -528,13 +542,20 @@ class Report:
         num_points = self.config.run_unbalance_response.num_points
         rtol = self.config.run_unbalance_response.rtol
 
+        frequency_units = self.config.run_unbalance_response.frequency_units
+        amplitude_units = self.config.run_unbalance_response.amplitude_units
+        phase_units = self.config.run_unbalance_response.phase_units
+
+        maxspeed = Q_(maxspeed, speed_unit).to(frequency_units).m
+        minspeed = Q_(minspeed, speed_unit).to(frequency_units).m
+
         if freq_range is None and not cluster_points:
-            freq_range = np.linspace(0, speed_factor * maxspeed, 201)
+            freq_range = np.linspace(
+                0, speed_factor * Q_(maxspeed, speed_unit).to("rad/s").m, 201
+            )
 
         # returns de nodes where forces will be applied
-        self._mode_shape(mode)
-        node_min = self.node_min
-        node_max = self.node_max
+        node_max, node_min = self._mode_shape(mode)
         nodes = [int(node) for sub_nodes in [node_min, node_max] for node in sub_nodes]
 
         _magnitude = self._unbalance_forces(mode)
@@ -552,7 +573,7 @@ class Report:
         )
         # fmt: on
 
-        mag = response.magnitude
+        mag = Q_(response.magnitude, "m").to(amplitude_units).m
 
         plot = make_subplots(
             rows=2, cols=2, specs=[[{}, {"type": "polar", "rowspan": 2}], [{}, None]]
@@ -567,7 +588,7 @@ class Report:
         k = 0
         for n, o in zip(probe_nodes, probe_orientations):
             dof = self.rotor.number_dof * n + 1
-            fig = response.plot(dof)
+            fig = response.plot(dof, frequency_units, amplitude_units, phase_units)
 
             for j, data in enumerate(fig["data"]):
                 data.line.color = list(tableau_colors)[k]
@@ -639,12 +660,12 @@ class Report:
             unbalance_dict["probe {}".format(k + 1)] = _dict
 
             # amplitude limit (A1) - API684 - SP6.8.2.11
-            A1 = 25.4 * np.sqrt(12000 / (30 * maxspeed / np.pi)) * 1e-6
-
+            A1 = 25.4 * np.sqrt(12000 / Q_(maxspeed, speed_unit).to("rpm")) * 1e-6
+            A1 = Q_(A1, "m").to(amplitude_units).m
             Amax = max(mag[dof])
 
             # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
-            Scc = max(A1 / Amax, 0.5)
+            Scc = max(A1.m / Amax, 0.5)
             Scc = min(Scc, 6.0)
 
             customdata = [minspeed, maxspeed]
@@ -674,7 +695,7 @@ class Report:
             plot.add_trace(
                 go.Scatter(
                     x=[minspeed, maxspeed],
-                    y=[A1, A1],
+                    y=[A1.m, A1.m],
                     mode="lines",
                     line=dict(width=2.0, color="black", dash="dashdot"),
                     name="Av1 - Mechanical test vibration limit",
@@ -686,7 +707,7 @@ class Report:
             )
             plot.add_annotation(
                 x=(minspeed + maxspeed) / 2,
-                y=A1,
+                y=A1.m,
                 axref="x",
                 ayref="y",
                 xshift=0,
@@ -715,30 +736,23 @@ class Report:
         mode : int
             the n'th vibration mode
 
-        Attributes
-        ----------
+        Returns
+        -------
         node_min : int
             Nodes where the maximum displacements occur
         node_max : int
             Nodes where the minimum displacements occur
 
-        Returns
-        -------
-        fig : Plotly graph_objects.Figure()
-            The figure object with the plot.
-
         Example
         -------
         >>> import report as rp
         >>> report = rp.report_example()
-        >>> fig = report._mode_shape(mode=0)
-        >>> report.node_min
+        >>> node_min, node_max = report._mode_shape(mode=0)
+        >>> node_min
         array([], dtype=float64)
-        >>> report.node_max
+        >>> node_max
         array([3.])
         """
-        nodes_pos = self.rotor.nodes_pos
-        df_bearings = self.rotor.df_bearings
         df_disks = self.rotor.df_disks
         speed = self.config.rotor_properties.rotor_speeds.oper_speed
 
@@ -809,10 +823,32 @@ class Report:
         elif self.rotor_type == "single_overhung_r":
             node_max = [max(df_disks["n"])]
 
-        nodes_pos = np.array(nodes_pos)
+        return node_min, node_max
 
-        self.node_min = node_min
-        self.node_max = node_max
+    def _plot_mode_shape(self, mode):
+        """Plot the mode shapes for the rotor.
+
+        Parameters
+        ----------
+        mode : int
+            the n'th vibration mode
+
+        Returns
+        -------
+        fig : Plotly graph_objects.Figure()
+            The figure object with the plot.
+
+        Example
+        -------
+        >>> import report as rp
+        >>> report = rp.report_example()
+        >>> fig = report._plot_mode_shape(mode=0)
+        """
+        nodes_pos = np.array(self.rotor.nodes_pos)
+        df_bearings = self.rotor.df_bearings
+        speed = self.config.rotor_properties.rotor_speeds.oper_speed
+
+        modal = self.rotor.run_modal(speed=speed)
 
         fig = modal.plot_mode_2d(frequency_units=self.config.mode_shape.frequency_units)
         fig.add_trace(
@@ -890,33 +926,19 @@ class Report:
         >>> report.Qa
         28777.90178571429
         """
-        D = self.config.stability_level1.D
-        H = self.config.stability_level1.H
-        HP = self.config.stability_level1.rated_power
-        rho_ratio = self.config.stability_level1.rho_ratio
-        RHOs = self.config.stability_level1.rho_suction
-        RHOd = self.config.stability_level1.rho_discharge
-        unit = self.config.stability_level1.unit
+        length_unit = self.config.stability_level1.length_unit
+        power_unit = self.config.stability_level1.power_unit
+        density_unit = self.config.stability_level1.density_unit
 
+        D = Q_(self.config.stability_level1.D, length_unit).to("m").m
+        H = Q_(self.config.stability_level1.H, length_unit).to("m").m
+        HP = Q_(self.config.stability_level1.rated_power, power_unit).to("hp").m
+        RHOs = Q_(self.config.stability_level1.rho_suction, density_unit).to("kg/m**3").m
+        RHOd = Q_(self.config.stability_level1.rho_discharge, density_unit).to("kg/m**3").m
+        rho_ratio = self.config.stability_level1.rho_ratio
         machine_type = self.config.rotor_properties.rotor_id.type
 
-        if self.config.rotor_properties.rotor_speeds.unit == "rpm":
-            speed = self.config.rotor_properties.rotor_speeds.oper_speed
-            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
-            self.MCS = maxspeed
-
-        if self.config.rotor_properties.rotor_speeds.unit == "rad/s":
-            speed = self.config.rotor_properties.rotor_speeds.oper_speed * 30 / np.pi
-            maxspeed = self.config.rotor_properties.rotor_speeds.max_speed * 30 / np.pi
-            self.MCS = maxspeed
-
-        steps = 11
-        if self.config.stability_level1.unit == "m":
-            C = 9.55
-        elif self.config.stability_level1.unit == "in":
-            C = 63.0
-        else:
-            raise ValueError("config.stability_level1.unit options are 'm' or 'in'.")
+        self.MCS = maxspeed
 
         if len(D) != len(H):
             raise Exception(
@@ -924,6 +946,8 @@ class Report:
                 "must have the same length."
             )
 
+        steps = 11
+        C = 9.55
         Qa = 0.0
         cross_coupled_array = np.array([])
         # Qa - Anticipated cross-coupling for compressors - API 684 - SP6.8.5.6
@@ -1014,8 +1038,8 @@ class Report:
         log_dec_a = log_dec[np.where(cross_coupled_Qa == Qa)][0]
 
         # CSR - Critical Speed Ratio
-        crit_speed = self.rotor.run_modal(speed=maxspeed * np.pi / 30).wn[0]
-        CSR = maxspeed * (np.pi / 30) / crit_speed
+        crit_speed = self.rotor.run_modal(speed=maxspeed).wn[0]
+        CSR = maxspeed / crit_speed
 
         # RHO_mean - Average gas density
         RHO_mean = (RHOd + RHOs) / 2
@@ -1214,6 +1238,8 @@ class Report:
         >>> dataframe = report._stability_level_2()
         """
         oper_speed = self.config.rotor_properties.rotor_speeds.oper_speed
+        unit = speed_unit = self.config.rotor_properties.rotor_speeds.unit
+        oper_speed = Q_(oper_speed, unit).to("rad/s").m
 
         # Build a list of seals
         seal_list = [
@@ -1538,6 +1564,7 @@ def report_example():
                 "max_speed": 1000,
                 "oper_speed": 800,
                 "trip_speed": 1200,
+                "unit": "rad/s",
             }
         },
         bearings={
@@ -1562,7 +1589,9 @@ def report_example():
             "rho_ratio": [1.11, 1.14],
             "rho_suction": 30.45,
             "rho_discharge": 37.65,
-            "unit": "m",
+            "length_unit": "m",
+            "power_unit": "hp",
+            "density_unit": "kg/m**3",
         },
     )
 
