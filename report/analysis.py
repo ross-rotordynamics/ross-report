@@ -18,7 +18,6 @@ from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
 from ross.units import Q_
 
-
 # fmt: on
 
 # set Plotly palette of colors
@@ -199,19 +198,17 @@ class Report:
         >>> # to run the report analysis, use:
         >>> # report.run_report()
         """
-        fig_ucs = []
-        fig_dcs = []
-        fig_mode_shape = []
-        fig_unbalance = []
-        fig_a_lvl1 = []
-        fig_b_lvl1 = []
-        df_unbalance = []
-        summaries = []
-
         rotor = copy(self.rotor)
 
         # static analysis
         fig_static = self._plot_static_analysis()
+
+        results_dict = {
+            "static_analysis": fig_static,
+            "oper_clearance": {},
+            "min_clearance": {},
+            "max_clearance": {},
+        }
 
         # loop through bearings clearance
         for k, bearings in self.config.bearings.__dict__.items():
@@ -223,11 +220,14 @@ class Report:
             self.rotor = self._rotor_instance(rotor, bearings)
 
             # undamped critical speed map
-            fig_ucs.append(self._plot_ucs())
+            results_dict[k]["ucs_map"] = self._plot_ucs()
 
             # campbell diagram
-            fig_dcs.append(self._plot_campbell_diagram())
+            results_dict[k]["dcs_map"] = self._plot_campbell_diagram()
 
+            fig_mode_shape = []
+            fig_unbalance = []
+            df_unbalance = []
             for i, mode in enumerate([1, 3]):
                 # mode shape figures
                 fig_mode_shape.append(self._plot_mode_shape(mode))
@@ -238,33 +238,26 @@ class Report:
                 df = pd.DataFrame(_dict).astype(object)
                 df_unbalance.append(df)
 
+            results_dict[k]["mode_shape"] = fig_mode_shape
+            results_dict[k]["unbalace_response"] = fig_unbalance
+            results_dict[k]["unbalace_summary"] = df_unbalance
+
             # stability level 1 figures
-            figs = self._stability_level_1()
-            fig_a_lvl1.append(figs[0])
-            fig_b_lvl1.append(figs[1])
+            results_dict[k]["stability_level1"] = self._stability_level_1()
 
             # stability level 2 dataframe
-            df_lvl2 = self._stability_level_2()
+            if self.condition:
+                df_lvl2 = self._stability_level_2()
+                results_dict[k]["stability_level2"] = df_lvl2
+            else:
+                results_dict[k]["stability_level2"] = None
 
-            # API summary tables
-            summaries.append(self._summary())
-
-        df_unbalance = pd.concat(df_unbalance)
+            # Summary tables
+            results_dict[k]["summary"] = self._summary()
 
         self.rotor = rotor
 
-        return {
-            "fig_static": fig_static,
-            "fig_ucs": fig_ucs,
-            "fig_dcs": fig_dcs,
-            "fig_mode_shape": fig_mode_shape,
-            "fig_unbalance": fig_unbalance,
-            "df_unbalance": df_unbalance,
-            "fig_a_lvl1": fig_a_lvl1,
-            "fig_b_lvl1": fig_b_lvl1,
-            "df_lvl2": df_lvl2,
-            "summaries": summaries,
-        }
+        return results_dict
 
     def _plot_campbell_diagram(self):
         """Plot Campbell Diagram.
@@ -284,7 +277,7 @@ class Report:
         """
         fig = self.rotor.run_campbell(
             speed_range=self.config.run_campbell.speed_range,
-            frequencies=self.config.run_campbell.frequencies,
+            frequencies=self.config.run_campbell.num_modes,
         ).plot(harmonics=self.config.run_campbell.harmonics)
 
         return fig
@@ -577,9 +570,7 @@ class Report:
         probe_orientations = self.config.run_unbalance_response.probes.orientation
         probe_unit = self.config.run_unbalance_response.probes.unit
         probes = [(n, ort) for n, ort in zip(probe_nodes, probe_orientations)]
-        unbalance_dict = {
-            "probe {}".format(i + 1): None for i in range(len(probes))
-        }
+        unbalance_dict = {"probe {}".format(i + 1): None for i in range(len(probes))}
 
         k = 0
         plot = response.plot(
@@ -816,7 +807,9 @@ class Report:
 
         modal = self.rotor.run_modal(speed=speed)
 
-        fig = modal.plot_mode_2d(frequency_units=self.config.mode_shape.frequency_units)
+        fig = modal.plot_mode_2d(
+            mode=mode, frequency_units=self.config.mode_shape.frequency_units
+        )
         fig.add_trace(
             go.Scatter(
                 x=nodes_pos[df_bearings["n"]],
@@ -895,16 +888,23 @@ class Report:
         length_unit = self.config.stability_level1.length_unit
         power_unit = self.config.stability_level1.power_unit
         density_unit = self.config.stability_level1.density_unit
+        speed_unit = self.config.rotor_properties.rotor_speeds.unit
 
         D = Q_(self.config.stability_level1.D, length_unit).to("m").m
         H = Q_(self.config.stability_level1.H, length_unit).to("m").m
         HP = Q_(self.config.stability_level1.rated_power, power_unit).to("hp").m
-        RHOs = Q_(self.config.stability_level1.rho_suction, density_unit).to("kg/m**3").m
-        RHOd = Q_(self.config.stability_level1.rho_discharge, density_unit).to("kg/m**3").m
+        RHOs = (
+            Q_(self.config.stability_level1.rho_suction, density_unit).to("kg/m**3").m
+        )
+        RHOd = (
+            Q_(self.config.stability_level1.rho_discharge, density_unit).to("kg/m**3").m
+        )
         rho_ratio = self.config.stability_level1.rho_ratio
         machine_type = self.config.rotor_properties.rotor_id.type
 
-        self.MCS = maxspeed
+        self.MCS = self.config.rotor_properties.rotor_speeds.max_speed
+        speed = self.config.rotor_properties.rotor_speeds.oper_speed
+        speed = Q_(speed, speed_unit).to("rpm").m
 
         if len(D) != len(H):
             raise Exception(
@@ -1004,7 +1004,12 @@ class Report:
         log_dec_a = log_dec[np.where(cross_coupled_Qa == Qa)][0]
 
         # CSR - Critical Speed Ratio
-        crit_speed = self.rotor.run_modal(speed=maxspeed).wn[0]
+        maxspeed = Q_(self.MCS, speed_unit).to("rad/s").m
+        try:
+            crit_speed = self.rotor.run_critical_speed().wn[0]
+        except:
+            crit_speed = self.rotor.run_modal(speed=maxspeed).wn[0]
+
         CSR = maxspeed / crit_speed
 
         # RHO_mean - Average gas density
@@ -1348,12 +1353,15 @@ class Report:
             CSR=[self.CSR],
             RHO_gas=[self.rho_gas],
         )
-        stab_lvl2_data = dict(
-            tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
-        )
-
         df_stab_lvl1 = pd.DataFrame(stab_lvl1_data)
-        df_stab_lvl2 = pd.DataFrame(stab_lvl2_data)
+
+        if self.condition:
+            stab_lvl2_data = dict(
+                tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
+            )
+            df_stab_lvl2 = pd.DataFrame(stab_lvl2_data)
+        else:
+            df_stab_lvl2 = None
 
         return df_stab_lvl1, df_stab_lvl2
 
@@ -1379,8 +1387,6 @@ class Report:
         for var in stab_lvl1_data.columns[2:]:
             stab_lvl1_data[str(var)] = np.round(stab_lvl1_data[str(var)], 3)
 
-        stab_lvl2_data["logdec"] = np.round(stab_lvl2_data["logdec"], 4)
-
         stab_lvl1_titles = [
             "<b>Rotor Tag</b>",
             "<b>Machine Type</b>",
@@ -1393,14 +1399,21 @@ class Report:
             "<b>CSR</b>",
             "<b>Gas Density</b>",
         ]
-        stab_lvl2_titles = ["<b>Components</b>", "<b>Log. Dec.</b>"]
 
-        fig = make_subplots(
-            rows=2,
-            cols=1,
-            specs=[[{"type": "table"}], [{"type": "table"}]],
-            subplot_titles=["<b>Stability Level 1</b>", "<b>Stability Level 2</b>"],
-        )
+        if self.condition:
+            fig = make_subplots(
+                rows=2,
+                cols=1,
+                specs=[[{"type": "table"}], [{"type": "table"}]],
+                subplot_titles=["<b>Stability Level 1</b>", "<b>Stability Level 2</b>"],
+            )
+        else:
+            fig = make_subplots(
+                rows=1,
+                cols=1,
+                specs=[[{"type": "table"}]],
+                subplot_titles=["<b>Stability Level 1</b>"],
+            )
 
         colors = ["#ffffff", "#c4d9ed"]
         cell_colors = [colors[i % 2] for i in range(len(stab_lvl1_data["tags"]))]
@@ -1426,28 +1439,34 @@ class Report:
             col=1,
         )
 
-        cell_colors = [colors[i % 2] for i in range(len(stab_lvl2_data["tags"]))]
-        fig.add_trace(
-            go.Table(
-                header=dict(
-                    values=stab_lvl2_titles,
-                    font=dict(family="Verdana", size=14, color="white"),
-                    line=dict(color="#1e4162", width=1.5),
-                    fill=dict(color="#1e4162"),
-                    align="center",
+        if self.condition:
+            stab_lvl2_data["logdec"] = np.round(stab_lvl2_data["logdec"], 4)
+            stab_lvl2_titles = ["<b>Components</b>", "<b>Log. Dec.</b>"]
+
+            cell_colors = [colors[i % 2] for i in range(len(stab_lvl2_data["tags"]))]
+            fig.add_trace(
+                go.Table(
+                    header=dict(
+                        values=stab_lvl2_titles,
+                        font=dict(family="Verdana", size=14, color="white"),
+                        line=dict(color="#1e4162", width=1.5),
+                        fill=dict(color="#1e4162"),
+                        align="center",
+                    ),
+                    cells=dict(
+                        values=[
+                            stab_lvl2_data[str(var)] for var in stab_lvl2_data.columns
+                        ],
+                        font=dict(family="Verdana", size=14, color="#12263b"),
+                        line=dict(color="#c4d9ed", width=1.5),
+                        fill=dict(color=[cell_colors * len(stab_lvl2_data["tags"])]),
+                        align="center",
+                        height=25,
+                    ),
                 ),
-                cells=dict(
-                    values=[stab_lvl2_data[str(var)] for var in stab_lvl2_data.columns],
-                    font=dict(family="Verdana", size=14, color="#12263b"),
-                    line=dict(color="#c4d9ed", width=1.5),
-                    fill=dict(color=[cell_colors * len(stab_lvl2_data["tags"])]),
-                    align="center",
-                    height=25,
-                ),
-            ),
-            row=2,
-            col=1,
-        )
+                row=2,
+                col=1,
+            )
 
         return fig
 
