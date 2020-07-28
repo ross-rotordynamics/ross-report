@@ -328,13 +328,50 @@ class Report:
         >>> report = rp.report_example()
         >>> fig = report._plot_ucs()
         """
+        max_speed = self.config.rotor_properties.rotor_speeds.max_speed
+        min_speed = self.config.rotor_properties.rotor_speeds.min_speed
+        oper_speed = self.config.rotor_properties.rotor_speeds.oper_speed
+        trip_speed = self.config.rotor_properties.rotor_speeds.trip_speed
+        units = self.config.rotor_properties.rotor_speeds.unit
+        frequency_units = self.config.plot_ucs.frequency_units
+
         fig = self.rotor.plot_ucs(
             stiffness_range=self.config.plot_ucs.stiffness_range,
             num_modes=self.config.plot_ucs.num_modes,
             num=self.config.plot_ucs.num,
             synchronous=self.config.plot_ucs.synchronous,
             stiffness_units=self.config.plot_ucs.stiffness_units,
-            frequency_units=self.config.plot_ucs.frequency_units,
+            frequency_units=frequency_units
+        )
+
+        _speeds = [min_speed, max_speed, oper_speed, trip_speed]
+        speeds = [Q_(speed, units).to(frequency_units).m for speed in _speeds]
+        labels = ["min. speed", "max. speed", "rated speed", "trip speed"]
+
+        for speed, label in zip(speeds, labels):
+            fig.add_trace(
+                go.Scatter(
+                    x=[min(fig.data[0].x), max(fig.data[0].x)],
+                    y=[speed, speed],
+                    mode="lines",
+                    line=dict(color="black", dash="dot", width=2),
+                    name=label,
+                    hoverinfo="none",
+                    showlegend=False,
+                    yaxis="y2",
+                )
+            )
+
+        fig.update_layout(
+            yaxis2=dict(
+                ticktext=labels,
+                tickvals=speeds,
+                type="log",
+                matches="y",
+                anchor="x",
+                overlaying="y",
+                side="right",
+            ),
         )
 
         return fig
