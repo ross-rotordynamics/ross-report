@@ -288,7 +288,18 @@ class Config:
             Default is "m/N"
         phase_units : str, optional
             Phase units.
-            Default is "rad"
+            Default is "rad".
+        rotor_length_units : str, optional
+            Units for rotor length.
+            Default is "m".
+
+        plot_deflected_shape : dict
+            Options to configurate the deflected shape plot.
+
+            speed : list, array,
+                List with selected speed to plot the deflected shape.
+                The speed values must be elements from frequency_range option,
+                otherwise it returns an error.
 
     stability_level1 : dict
         Dictionary configurating stability_level_1 parameters.
@@ -407,6 +418,10 @@ class Config:
             "frequency_units": "rad/s",
             "amplitude_units": "m",
             "phase_units": "rad",
+            "rotor_length_units": "m",
+            "plot_deflected_shape": {
+                "speed": [],
+            },
         })
 
         # Configurating stability level 1 analysis
