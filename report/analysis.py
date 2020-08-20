@@ -196,7 +196,7 @@ class Report:
         >>> import report as rp
         >>> report = rs.report_example()
         >>> # to run the report analysis, use:
-        >>> # report.run_report()
+        >>> # results = report.run_report()
         """
         rotor = copy(self.rotor)
 
@@ -226,6 +226,7 @@ class Report:
             results_dict[k]["dcs_map"] = self._plot_campbell_diagram()
 
             fig_mode_shape = []
+            fig_defl_shape = []
             fig_unbalance = []
             df_unbalance = []
             for i, mode in enumerate([1, 3]):
@@ -233,13 +234,15 @@ class Report:
                 fig_mode_shape.append(self._plot_mode_shape(mode))
 
                 # unbalance response figures and dataframe
-                fig, _dict = self._unbalance_response(mode)
+                fig, shapes, _dict = self._unbalance_response(mode)
                 fig_unbalance.append(fig)
+                fig_defl_shape.append(shapes)
                 df = pd.DataFrame(_dict).astype(object)
                 df_unbalance.append(df)
 
             results_dict[k]["mode_shape"] = fig_mode_shape
             results_dict[k]["unbalace_response"] = fig_unbalance
+            results_dict[k]["deflected_shape"] = fig_defl_shape
             results_dict[k]["unbalace_summary"] = df_unbalance
 
             # stability level 1 figures
@@ -536,13 +539,13 @@ class Report:
         ----------
         mode : int
             n'th mode shape.
-        samples : int
-            Number of samples to generate de frequency range.
 
         Returns
         -------
-        subplots : Plotly graph_objects.make_subplots()
+        plot : Plotly graph_objects.make_subplots()
             Plotly figure with Amplitude vs Frequency and Phase vs Frequency plots.
+        plot_shapes : list of Figures
+            List with Plotly figures of deflected shape graphs
         unbalance_dict : dict
             A dictionary with information about simulation parameters to be
             displayed in the report. The dictionary contains:
@@ -558,12 +561,13 @@ class Report:
         -------
         >>> import report as rp
         >>> report = rp.report_example()
-        >>> fig, unbalance_dict = report._unbalance_response(mode=0)
+        >>> fig, plot_shapes, unbalance_dict = report._unbalance_response(mode=0)
         """
         maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
         minspeed = self.config.rotor_properties.rotor_speeds.min_speed
         speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
         speed_unit = self.config.rotor_properties.rotor_speeds.unit
+        plot_speeds = self.config.run_unbalance_response.plot_deflected_shape.speed
 
         freq_range = self.config.run_unbalance_response.frequency_range
         modes = self.config.run_unbalance_response.modes
@@ -575,6 +579,7 @@ class Report:
         frequency_units = self.config.run_unbalance_response.frequency_units
         amplitude_units = self.config.run_unbalance_response.amplitude_units
         phase_units = self.config.run_unbalance_response.phase_units
+        rotor_length_units = self.config.run_unbalance_response.rotor_length_units
 
         maxspeed = Q_(maxspeed, speed_unit).to(frequency_units).m
         minspeed = Q_(minspeed, speed_unit).to(frequency_units).m
@@ -715,7 +720,16 @@ class Report:
             col=1,
         )
 
-        return plot, unbalance_dict
+        plot_shapes = [
+            response.plot_deflected_shape(
+                speed=speed,
+                frequency_units=frequency_units,
+                displacement_units=amplitude_units,
+                rotor_length_units=rotor_length_units,
+            ) for speed in plot_speeds
+        ]
+
+        return plot, plot_shapes, unbalance_dict
 
     def _mode_shape(self, mode):
         """Evaluate the mode shapes for the rotor.
@@ -1602,6 +1616,7 @@ def report_example():
                 "unit": "rad",
             },
             "frequency_range": np.linspace(0, 1500, 201),
+            "plot_deflected_shape": {"speed": [615]},
         },
         plot_ucs={"stiffness_range": (5, 8)},
         stability_level1={
