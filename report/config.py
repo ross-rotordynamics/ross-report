@@ -296,10 +296,13 @@ class Config:
         plot_deflected_shape : dict
             Options to configurate the deflected shape plot.
 
-            speed : list, array,
+            speed : list, array
                 List with selected speed to plot the deflected shape.
                 The speed values must be elements from frequency_range option,
                 otherwise it returns an error.
+            speed_units : str, optional
+                Units for selected speed in deflected shape analisys.
+                Default is "rad/s".
 
     stability_level1 : dict
         Dictionary configurating stability_level_1 parameters.
@@ -421,6 +424,7 @@ class Config:
             "rotor_length_units": "m",
             "plot_deflected_shape": {
                 "speed": [],
+                "speed_units": "rad/s",
             },
         })
 
