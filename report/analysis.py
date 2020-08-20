@@ -4,6 +4,7 @@ from copy import copy, deepcopy
 
 import numpy as np
 import pandas as pd
+import warnings
 from plotly import express as px
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
@@ -212,51 +213,55 @@ class Report:
 
         # loop through bearings clearance
         for k, bearings in self.config.bearings.__dict__.items():
-            if not isinstance(bearings, Iterable):
+            if bearings is None:
+                warnings.warn(
+                    f"Option '{k}' is empty. No analyses are performed for {k} bearings."
+                )
+            elif not isinstance(bearings, Iterable):
                 raise ValueError(
                     "{} option must be a list of bearing elements".format(k)
                 )
-
-            self.rotor = self._rotor_instance(rotor, bearings)
-
-            # undamped critical speed map
-            results_dict[k]["ucs_map"] = self._plot_ucs()
-
-            # campbell diagram
-            results_dict[k]["dcs_map"] = self._plot_campbell_diagram()
-
-            fig_mode_shape = []
-            fig_defl_shape = []
-            fig_unbalance = []
-            df_unbalance = []
-            for i, mode in enumerate([1, 3]):
-                # mode shape figures
-                fig_mode_shape.append(self._plot_mode_shape(mode))
-
-                # unbalance response figures and dataframe
-                fig, shapes, _dict = self._unbalance_response(mode)
-                fig_unbalance.append(fig)
-                fig_defl_shape.append(shapes)
-                df = pd.DataFrame(_dict).astype(object)
-                df_unbalance.append(df)
-
-            results_dict[k]["mode_shape"] = fig_mode_shape
-            results_dict[k]["unbalace_response"] = fig_unbalance
-            results_dict[k]["deflected_shape"] = fig_defl_shape
-            results_dict[k]["unbalace_summary"] = df_unbalance
-
-            # stability level 1 figures
-            results_dict[k]["stability_level1"] = self._stability_level_1()
-
-            # stability level 2 dataframe
-            if self.condition:
-                df_lvl2 = self._stability_level_2()
-                results_dict[k]["stability_level2"] = df_lvl2
             else:
-                results_dict[k]["stability_level2"] = None
+                self.rotor = self._rotor_instance(rotor, bearings)
 
-            # Summary tables
-            results_dict[k]["summary"] = self._summary()
+                # undamped critical speed map
+                results_dict[k]["ucs_map"] = self._plot_ucs()
+
+                # campbell diagram
+                results_dict[k]["dcs_map"] = self._plot_campbell_diagram()
+
+                fig_mode_shape = []
+                fig_defl_shape = []
+                fig_unbalance = []
+                df_unbalance = []
+                for i, mode in enumerate([1, 3]):
+                    # mode shape figures
+                    fig_mode_shape.append(self._plot_mode_shape(mode))
+
+                    # unbalance response figures and dataframe
+                    fig, shapes, _dict = self._unbalance_response(mode)
+                    fig_unbalance.append(fig)
+                    fig_defl_shape.append(shapes)
+                    df = pd.DataFrame(_dict).astype(object)
+                    df_unbalance.append(df)
+
+                results_dict[k]["mode_shape"] = fig_mode_shape
+                results_dict[k]["unbalance_response"] = fig_unbalance
+                results_dict[k]["deflected_shape"] = fig_defl_shape
+                results_dict[k]["unbalace_summary"] = df_unbalance
+
+                # stability level 1 figures
+                results_dict[k]["stability_level1"] = self._stability_level_1()
+
+                # stability level 2 dataframe
+                if self.condition:
+                    df_lvl2 = self._stability_level_2()
+                    results_dict[k]["stability_level2"] = df_lvl2
+                else:
+                    results_dict[k]["stability_level2"] = None
+
+                # Summary tables
+                results_dict[k]["summary"] = self._summary()
 
         self.rotor = rotor
 
@@ -278,10 +283,11 @@ class Report:
         >>> report = rp.report_example()
         >>> fig = report._plot_campbell_diagram()
         """
+        units = self.config.run_campbell.frequency_units
         fig = self.rotor.run_campbell(
             speed_range=self.config.run_campbell.speed_range,
             frequencies=self.config.run_campbell.num_modes,
-        ).plot(harmonics=self.config.run_campbell.harmonics)
+        ).plot(harmonics=self.config.run_campbell.harmonics, frequency_units=units)
 
         return fig
 
@@ -568,6 +574,7 @@ class Report:
         speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
         speed_unit = self.config.rotor_properties.rotor_speeds.unit
         plot_speeds = self.config.run_unbalance_response.plot_deflected_shape.speed
+        spd_unit = self.config.run_unbalance_response.plot_deflected_shape.speed_units
 
         freq_range = self.config.run_unbalance_response.frequency_range
         modes = self.config.run_unbalance_response.modes
@@ -723,7 +730,7 @@ class Report:
         plot_shapes = [
             response.plot_deflected_shape(
                 speed=speed,
-                frequency_units=frequency_units,
+                frequency_units=spd_unit,
                 displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
             ) for speed in plot_speeds
@@ -1036,15 +1043,19 @@ class Report:
 
         # verifies if log dec is greater than zero to begin extrapolation
         cross_coupled_Qa = cross_coupled_array[:, -1]
-        if log_dec[-1] >= 0:
+        if log_dec[-1] > 0:
             g = interp1d(
                 cross_coupled_Qa, log_dec, fill_value="extrapolate", kind="linear"
             )
             stiff = cross_coupled_Qa[-1] * (1 + 1 / (len(cross_coupled_Qa)))
+            k = 0
             while g(stiff) > 0:
                 log_dec = np.append(log_dec, g(stiff))
                 cross_coupled_Qa = np.append(cross_coupled_Qa, stiff)
                 stiff += cross_coupled_Qa[-1] / (len(cross_coupled_Qa))
+                k += 1
+                if k > 10000:
+                    break
             Q0 = cross_coupled_Qa[-1]
 
         else:
@@ -1052,7 +1063,7 @@ class Report:
             Q0 = cross_coupled_Qa[idx]
 
         # Find value for log_dec corresponding to Qa
-        log_dec_a = log_dec[np.where(cross_coupled_Qa == Qa)][0]
+        log_dec_a = log_dec[np.where(np.isclose(cross_coupled_Qa, Qa))][0]
 
         # CSR - Critical Speed Ratio
         maxspeed = Q_(self.MCS, speed_unit).to("rad/s").m
