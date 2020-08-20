@@ -288,7 +288,21 @@ class Config:
             Default is "m/N"
         phase_units : str, optional
             Phase units.
-            Default is "rad"
+            Default is "rad".
+        rotor_length_units : str, optional
+            Units for rotor length.
+            Default is "m".
+
+        plot_deflected_shape : dict
+            Options to configurate the deflected shape plot.
+
+            speed : list, array
+                List with selected speed to plot the deflected shape.
+                The speed values must be elements from frequency_range option,
+                otherwise it returns an error.
+            speed_units : str, optional
+                Units for selected speed in deflected shape analisys.
+                Default is "rad/s".
 
     stability_level1 : dict
         Dictionary configurating stability_level_1 parameters.
@@ -313,6 +327,15 @@ class Config:
         unit: str, optional
             Unit system. Options are "m" (meter) and "in" (inch).
             Default is "m".
+        length_unit : str
+            Length units for D and H arguments.
+            Default is "m".
+        power_unit : str
+            Power unit for rated_power argument.
+            Default is "hp".
+        density_unit : str
+            Density unit for rho_suction and rho_discharge arguments.
+            Default is "kg/m**3".
 
     Returns
     -------
@@ -398,6 +421,11 @@ class Config:
             "frequency_units": "rad/s",
             "amplitude_units": "m",
             "phase_units": "rad",
+            "rotor_length_units": "m",
+            "plot_deflected_shape": {
+                "speed": [],
+                "speed_units": "rad/s",
+            },
         })
 
         # Configurating stability level 1 analysis
@@ -408,7 +436,9 @@ class Config:
             "rho_ratio": None,
             "rho_suction": None,
             "rho_discharge": None,
-            "unit": "m",
+            "length_unit": "m",
+            "power_unit": "hp",
+            "density_unit": "kg/m**3",
         })
         # fmt: on
 
