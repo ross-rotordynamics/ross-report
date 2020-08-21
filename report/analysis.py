@@ -1238,7 +1238,7 @@ class Report:
             else:
                 condition = False
 
-        if machine_type == "turbine" or machine_type == "axial flow":
+        if machine_type == "turbine" or machine_type == "axial_flow":
             if log_dec_a < 0.1:
                 condition = True
 
