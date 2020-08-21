@@ -68,42 +68,50 @@ class Report:
     def __init__(self, rotor, config):
         self.rotor = rotor
 
+        aux_df_disk = copy(rotor.df_disks)
+        aux_df_disk.drop(
+            aux_df_disk[(aux_df_disk.Ip <= 0) & (aux_df_disk.Id <= 0)].index,
+            inplace=True,
+        )
+        aux_df_disk.reset_index(drop=True)
+        self.aux_df_disk = aux_df_disk
+
         # check if rotor is between bearings, single or double overhung
         # fmt: off
         if(
-            all(i > min(rotor.df_bearings["n"]) for i in rotor.df_disks["n"]) and
-            all(i < max(rotor.df_bearings["n"]) for i in rotor.df_disks["n"])
+            all(i > min(rotor.df_bearings["n"]) for i in aux_df_disk["n"]) and
+            all(i < max(rotor.df_bearings["n"]) for i in aux_df_disk["n"])
         ):
             rotor_type = "between_bearings"
             disk_nodes = [
-                i for i in rotor.df_disks["n"] if(
+                i for i in aux_df_disk["n"] if(
                     i > min(rotor.df_bearings["n"]) and
                     i < max(rotor.df_bearings["n"])
                 )
             ]
         elif(
-            any(i < min(rotor.df_bearings["n"]) for i in rotor.df_disks["n"]) and
-            all(i < max(rotor.df_bearings["n"]) for i in rotor.df_disks["n"])
+            any(i < min(rotor.df_bearings["n"]) for i in aux_df_disk["n"]) and
+            all(i < max(rotor.df_bearings["n"]) for i in aux_df_disk["n"])
         ):
             rotor_type = "single_overhung_l"
             disk_nodes = [
-                i for i in rotor.df_disks["n"] if i < min(rotor.df_bearings["n"])
+                i for i in aux_df_disk["n"] if i < min(rotor.df_bearings["n"])
             ]
         elif(
-            all(i > min(rotor.df_bearings["n"]) for i in rotor.df_disks["n"]) and
-            any(i > max(rotor.df_bearings["n"]) for i in rotor.df_disks["n"])
+            all(i > min(rotor.df_bearings["n"]) for i in aux_df_disk["n"]) and
+            any(i > max(rotor.df_bearings["n"]) for i in aux_df_disk["n"])
         ):
             rotor_type = "single_overhung_r"
             disk_nodes = [
-                i for i in rotor.df_disks["n"] if i > max(rotor.df_bearings["n"])
+                i for i in aux_df_disk["n"] if i > max(rotor.df_bearings["n"])
             ]
         elif(
-            any(i < min(rotor.df_bearings["n"]) for i in rotor.df_disks["n"]) and
-            any(i > max(rotor.df_bearings["n"]) for i in rotor.df_disks["n"])
+            any(i < min(rotor.df_bearings["n"]) for i in aux_df_disk["n"]) and
+            any(i > max(rotor.df_bearings["n"]) for i in aux_df_disk["n"])
         ):
             rotor_type = "double_overhung"
             disk_nodes = [
-                i for i in rotor.df_disks["n"] if(
+                i for i in aux_df_disk["n"] if(
                         i < min(rotor.df_bearings["n"]) or
                         i > max(rotor.df_bearings["n"])
                 )
@@ -768,7 +776,7 @@ class Report:
         >>> node_max
         array([3.])
         """
-        df_disks = self.rotor.df_disks
+        aux_df_disk = self.aux_df_disk
         speed = self.config.rotor_properties.rotor_speeds.oper_speed
 
         modal = self.rotor.run_modal(speed=speed)
@@ -829,14 +837,14 @@ class Report:
                 node_max = np.round(np.array(idx_max) / nn)
 
         elif self.rotor_type == "double_overhung":
-            node_max = [max(df_disks["n"])]
-            node_min = [min(df_disks["n"])]
+            node_max = [max(aux_df_disk["n"])]
+            node_min = [min(aux_df_disk["n"])]
 
         elif self.rotor_type == "single_overhung_l":
-            node_min = [min(df_disks["n"])]
+            node_min = [min(aux_df_disk["n"])]
 
         elif self.rotor_type == "single_overhung_r":
-            node_max = [max(df_disks["n"])]
+            node_max = [max(aux_df_disk["n"])]
 
         return node_min, node_max
 
