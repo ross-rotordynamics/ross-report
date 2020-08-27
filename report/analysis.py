@@ -724,7 +724,7 @@ class Report:
                 name="Operation Speed Range",
                 legendgroup="Operation Speed Range",
                 hoveron="points+fills",
-                showlegend=True if i == 0 else False,
+                showlegend=True,
                 hoverlabel=dict(bgcolor=tableau_colors["green"]),
                 hovertemplate=(
                     f"<b>min. speed: {customdata[0]:.1f}</b><br>"
@@ -778,6 +778,8 @@ class Report:
         """
         aux_df_disk = self.aux_df_disk
         speed = self.config.rotor_properties.rotor_speeds.oper_speed
+        speed_unit = self.config.rotor_properties.rotor_speeds.unit
+        speed = Q_(speed, speed_unit).to("rad/s").m
 
         modal = self.rotor.run_modal(speed=speed)
         xn, yn, zn, xc, yc, zc_pos, nn = modal.calc_mode_shape(mode=mode)
@@ -870,7 +872,8 @@ class Report:
         nodes_pos = np.array(self.rotor.nodes_pos)
         df_bearings = self.rotor.df_bearings
         speed = self.config.rotor_properties.rotor_speeds.oper_speed
-
+        speed_unit = self.config.rotor_properties.rotor_speeds.unit
+        speed = Q_(speed, speed_unit).to("rad/s").m
         modal = self.rotor.run_modal(speed=speed)
 
         fig = modal.plot_mode_2d(

@@ -199,7 +199,7 @@ class Config:
         Dictionary configurating run_campbell parameters.
 
         speed_range : list, array
-            Array with the speed range.
+            Array with the speed range (must be in rad/s).
         num_modes : float, optional
             Number of frequencies that will be calculated.
             Default is 6.
@@ -250,9 +250,9 @@ class Config:
                 Default is "rad".
 
         frequency_range : list, array
-            Array with the desired range of frequencies. If None and cluster_points is
-            False, it creates an array from 0 to the max continuos speed times the
-            speed_factor.
+            Array with the desired range of frequencies (must be in rad/s).
+            If None and cluster_points is False, it creates an array from 0 to the max
+            continuos speed times the speed_factor.
             If None and cluster_points is True, it creates and automatic array based on
             the number of modes selected.
             Default is None with cluster_points False.
