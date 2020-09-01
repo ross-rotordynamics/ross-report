@@ -630,25 +630,29 @@ class Report:
         unbalance_dict = {"probe {}".format(i + 1): None for i in range(len(probes))}
 
         k = 0
+        # fmt: off
         plot = response.plot(
-            probes, probe_unit, frequency_units, amplitude_units, phase_units
+            probes, probe_unit, frequency_units, amplitude_units, phase_units,
+            subplot_kwargs=dict(width=800, height=600),
         )
-
+        # fmt: on
         fig = response.plot_magnitude(
             probes, probe_unit, frequency_units, amplitude_units
         )
         for j, data in enumerate(fig.data):
             _dict = {
                 "Probe node": [probe_nodes[j]],
-                "Probe orientation": [probe_orientations[j]],
+                "Probe orientation": [np.round(probe_orientations[j], 2)],
                 "Critical frequencies": [],
                 "Amplification factor": [],
                 "Scale factor": [],
                 "Separation margin - ACTUAL": [],
                 "Separation margin - REQUIRED": [],
                 "Unbalance station(s)": nodes,
-                "Unbalance weight(s)": _magnitude.tolist(),
-                "Unbalance phase(s)": phase,
+                "Unbalance weight(s)": [
+                    float(np.format_float_scientific(i, 2)) for i in _magnitude
+                ],
+                "Unbalance phase(s)": np.round(phase, 2),
             }
 
             idx_max = argrelextrema(data.y, np.greater)[0].tolist()
@@ -677,19 +681,16 @@ class Report:
 
                 # Separation Margin (SM) - API684 - SP6.8.2.10
                 if AF > 2.5 and wn[i] < minspeed:
-                    SM = min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100
-                    SMspeed = wn[i] * (1 + SM)
-                    SM_ref = (minspeed - wn[i]) / wn[i]
+                    SM = np.round(min([16, 17 * (1 - 1 / (AF - 1.5))]) / 100, 2)
+                    SM_ref = np.round((minspeed - wn[i]) / wn[i], 2)
 
                 elif AF > 2.5 and wn[i] > maxspeed:
-                    SM = min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100
-                    SMspeed = wn[i] * (1 - SM)
-                    SM_ref = (wn[i] - maxspeed) / maxspeed
+                    SM = np.round(min([26, 10 + 17 * (1 - 1 / (AF - 1.5))]) / 100, 2)
+                    SM_ref = np.round((wn[i] - maxspeed) / maxspeed, 2)
 
                 else:
                     SM = "None"
                     SM_ref = "None"
-                    SMspeed = "None"
 
                 # amplitude limit (A1) - API684 - SP6.8.2.11
                 A1 = 25.4 * np.sqrt(12000 / Q_(maxspeed, speed_unit).to("rpm")) * 1e-6
@@ -697,10 +698,10 @@ class Report:
                 Amax = max(data.y)
 
                 # Scale Factor (Scc) - API684 - SP6.8.2.11 / API617 - 4.8.2.11
-                _Scc = max(A1.m / Amax, 0.5)
+                _Scc = np.round(max(A1.m / Amax, 0.5), 2)
                 Scc = min(_Scc, 6.0)
 
-                _dict["Amplification factor"].append(AF)
+                _dict["Amplification factor"].append(np.round(AF, 2))
                 _dict["Scale factor"].append(Scc)
                 _dict["Separation margin - ACTUAL"].append(SM)
                 _dict["Separation margin - REQUIRED"].append(SM_ref)
@@ -741,6 +742,7 @@ class Report:
                 frequency_units=spd_unit,
                 displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
+                subplot_kwargs=dict(width=800, height=600),
             ) for speed in plot_speeds
         ]
 
