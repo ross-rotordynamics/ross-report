@@ -1,4 +1,7 @@
 # ROSS Report
+[![Build Status](https://travis-ci.com/ross-rotordynamics/ross-report.svg?branch=master)](https://travis-ci.com/ross-rotordynamics/ross-report)
+[![Build status](https://ci.appveyor.com/api/projects/status/5s4tdwsm7nk519go/branch/master?svg=true)](https://ci.appveyor.com/project/GabrielBachmannArimCarneirodeAlbuquerque/ross-report/branch/master)
+
 This package aims to build a report for [ROSS](https://github.com/ross-rotordynamics/ross), a rotordynamics python package.
 
 ## Quick start to graphics submodule
