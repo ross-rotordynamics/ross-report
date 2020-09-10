@@ -15,7 +15,7 @@ before_script:
 script:
   - pytest report --cov=ross
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - codecov
 deploy:
   provider: pypi
   user: GabrielBachmann
