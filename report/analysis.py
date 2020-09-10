@@ -1,16 +1,13 @@
 # fmt: off
+import warnings
 from collections.abc import Iterable
 from copy import copy, deepcopy
 
 import numpy as np
 import pandas as pd
-import warnings
 from plotly import express as px
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
-from scipy.interpolate import interp1d
-from scipy.signal import argrelextrema
-
 from ross.bearing_seal_element import BearingElement, SealElement
 from ross.disk_element import DiskElement
 from ross.materials import steel
@@ -18,6 +15,8 @@ from ross.plotly_theme import tableau_colors
 from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
 from ross.units import Q_
+from scipy.interpolate import interp1d
+from scipy.signal import argrelextrema
 
 # fmt: on
 

@@ -1,7 +1,9 @@
-from pathlib import Path
-import report
 import base64 as b64
+from pathlib import Path
+
 from plotly.graph_objs import Figure
+
+import report
 
 
 class CSS:

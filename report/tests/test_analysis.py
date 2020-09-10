@@ -1,14 +1,14 @@
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-
-from report.analysis import Report
-from report.config import Config
 from ross.bearing_seal_element import BearingElement
 from ross.disk_element import DiskElement
 from ross.materials import steel
 from ross.rotor_assembly import Rotor
 from ross.shaft_element import ShaftElement
+
+from report.analysis import Report
+from report.config import Config
 
 
 @pytest.fixture
