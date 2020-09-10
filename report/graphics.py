@@ -45,8 +45,7 @@ class Text(Content):
 
 
 class Img(Content):
-    """
-    """
+    """"""
 
     def __init__(self, path_to_img):
         self.path_to_img = Path(path_to_img)
@@ -60,8 +59,7 @@ class Img(Content):
 
 
 class Title(Content):
-    """
-    """
+    """"""
 
     def __init__(self, title):
         self.title = title
@@ -82,11 +80,11 @@ class Title(Content):
 
 
 class Page:
-    """
-    """
+    """"""
 
     def __init__(
-            self, content=None,
+        self,
+        content=None,
     ):
 
         for item in content:
@@ -201,19 +199,18 @@ class Link(Content):
 
 
 class Layout:
-    """Report Layout
-    """
+    """Report Layout"""
 
     def __init__(
-            self,
-            summary=True,
-            figures_list_ref=True,
-            css=CSS(),
-            pages=None,
-            main_title="ROSS Report",
+        self,
+        summary=True,
+        figures_list_ref=True,
+        css=CSS(),
+        pages=None,
+        main_title="ROSS Report",
     ):
         assert (
-                isinstance(pages, list) or isinstance(pages, Page) or pages is None
+            isinstance(pages, list) or isinstance(pages, Page) or pages is None
         ), "pages argument must be either a Page or a list of Pages."
         if isinstance(pages, list):
             for page in pages:
@@ -307,13 +304,13 @@ class Layout:
         rendered_pages = self.render_pages(figures_list_ref=self.figures_list_ref)
         summary = self.summary_renderer()
         html = (
-                """
+            """
                 <!DOCTYPE html>
                 <html lang="en">
                 <head>
                 <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
                     """
-                + """
+            + """
             <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
             <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
             <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
@@ -326,11 +323,11 @@ class Layout:
             """
         )
         html = (
-                html
-                + "<style>"
-                + str(self.css)
-                + "</style>"
-                + """
+            html
+            + "<style>"
+            + str(self.css)
+            + "</style>"
+            + """
             <style>
             
                 @media print { 
@@ -362,7 +359,7 @@ class Layout:
         </head>
         <body>
     """
-                + f"""
+            + f"""
         <div class="container-fluid">
             
             <div class="mt-4 offset-2 row">
