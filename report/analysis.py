@@ -358,7 +358,7 @@ class Report:
             num=self.config.plot_ucs.num,
             synchronous=self.config.plot_ucs.synchronous,
             stiffness_units=self.config.plot_ucs.stiffness_units,
-            frequency_units=frequency_units
+            frequency_units=frequency_units,
         )
 
         _speeds = [min_speed, max_speed, oper_speed, trip_speed]
@@ -741,7 +741,8 @@ class Report:
                 frequency_units=spd_unit,
                 displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
-            ) for speed in plot_speeds
+            )
+            for speed in plot_speeds
         ]
 
         return plot, plot_shapes, unbalance_dict

@@ -201,6 +201,7 @@ def report1():
 
     return Report(rotor, config)
 
+
 @pytest.fixture
 def report2():
     # rotor type: double overhung
@@ -412,7 +413,7 @@ def test_stability_level2(report0, report1, report2):
             0.011399321894782566,
             0.011399321895234833,
             0.010612141367754908,
-            0.010612141367232914
+            0.010612141367232914,
         ],
         atol=1e-6,
     )
