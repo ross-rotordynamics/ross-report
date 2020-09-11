@@ -202,7 +202,7 @@ class Report:
         Example
         -------
         >>> import report as rp
-        >>> report = rs.report_example()
+        >>> report = rp.analysis.report_example()
         >>> # to run the report analysis, use:
         >>> # results = report.run_report()
         """
@@ -954,7 +954,7 @@ class Report:
         >>> report = rp.report_example()
         >>> fig1, fig2 = report._stability_level_1()
         >>> report.Qa
-        28777.90178571429
+        3013.61482785762
         """
         length_unit = self.config.stability_level1.length_unit
         power_unit = self.config.stability_level1.power_unit
