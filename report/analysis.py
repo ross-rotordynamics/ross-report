@@ -115,7 +115,7 @@ class Report:
     >>> max_clearance_brg = [bearing0, bearing1]
 
     # Analyses setup
-    >>> config = Config()
+    >>> config = rp.Config()
     >>> config.update_config(
     ...     rotor_properties={
     ...         "rotor_speeds": {
