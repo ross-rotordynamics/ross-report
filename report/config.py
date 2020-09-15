@@ -366,6 +366,7 @@ class Config:
     {"type": "compressor", "tag": None}...
 
     Updating Config
+    >>> import numpy as np
     >>> configs.update_config(
     ...     rotor_properties={"rotor_id":{"type": "turbine", "tag": "Model"}},
     ...     run_campbell={
