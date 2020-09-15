@@ -137,8 +137,16 @@ class Config:
     rotordynamics analyses. It's a must to check all the options for a correct
     functioning.
 
+    The Config object works like a dictionary too. It's possible to return an value
+    from a key with the same dict syntax, however, it's not possible to set an item via
+    dict command to avoid introducing new options.
+
+    To update Config options, please use the command .update_config().
+
     The attributes are automatically generated and it's not possible to remove then or
     add new ones.
+
+    PLEASE, READ INSTRUCTIONS CAREFULLY, especially regarding to the units usage.
 
     Attributes
     ----------
@@ -151,17 +159,21 @@ class Config:
 
             min_speed : float
                 The machine minimum operational speed.
+                Units determined by "unit" option.
             max_speed : float
                 The machine  maximum operational speed.
+                Units determined by "unit" option.
             oper_speed : float
                 The machine  nominal operational speed.
+                Units determined by "unit" option.
             trip_speed : float
                 The machine overspeed trip.
+                Units determined by "unit" option.
             speed_factor : float
                 Multiplicative factor of the speed range - according to API 684.
                 Default is 1.50.
             unit : str
-                Unit system to speed values. Options: "rad/s", "rpm".
+                Input unit system to angular speed values. Options: "rad/s", "rpm", ...
                 Default is "rpm".
 
         rotor_id : dict
@@ -192,7 +204,7 @@ class Config:
         Dictionary configurating the mode shape analysis
 
         frequency_units : str
-            Unit for the frequency values.
+            Output unit for the frequency values.
             Default is "rad/s"
 
     run_campbell : dict
@@ -207,7 +219,7 @@ class Config:
             List with the harmonics to be plotted.
             The default is to plot 1x.
         frequency_units : str, optional
-            Unit for the frequency values.
+            Output Unit for the frequency values.
             Default is "rad/s".
 
     plot_ucs : dict
@@ -246,7 +258,7 @@ class Config:
                 0 or π (rad) corresponds to the X orientation and
                 π / 2 or 3 * π / 2 (rad) corresponds to the Y orientation.
             unit : str
-                Unit system for the orientation angle. Can be "rad" or "degree".
+                Input unit system for the orientation angle. Can be "rad" or "degree".
                 Default is "rad".
 
         frequency_range : list, array
@@ -281,16 +293,16 @@ class Config:
             calculate the approximated critical speeds.
             Default is 0.005 (0.5%).
         frequency_units : str, optional
-            Frequency units.
+            Frequency output units.
             Default is "rad/s"
         amplitude_units : str, optional
-            Amplitude units.
+            Amplitude output units.
             Default is "m/N"
         phase_units : str, optional
-            Phase units.
+            Phase output units.
             Default is "rad".
         rotor_length_units : str, optional
-            Units for rotor length.
+            Output units for rotor length.
             Default is "m".
 
         plot_deflected_shape : dict
@@ -299,10 +311,7 @@ class Config:
             speed : list, array
                 List with selected speed to plot the deflected shape.
                 The speed values must be elements from frequency_range option,
-                otherwise it returns an error.
-            speed_units : str, optional
-                Units for selected speed in deflected shape analisys.
-                Default is "rad/s".
+                otherwise it returns an error. (must be in rad/s)
 
     stability_level1 : dict
         Dictionary configurating stability_level_1 parameters.
@@ -355,6 +364,30 @@ class Config:
     >>> configs = Config()
     >>> configs["rotor_properties"]["rotor_id"] # doctest: +ELLIPSIS
     {"type": "compressor", "tag": None}...
+
+    Updating Config
+    >>> configs.update_config(
+    ...     rotor_properties={"rotor_id":{"type": "turbine", "tag": "Model"}},
+    ...     run_campbell={
+    ...         "speed_range": np.linspace(100, 1200, 91),  # must be in rad/s
+    ...         "frequency_units": "rpm",  # defines the output unit for speed_range
+    ...     },
+    ...     run_unbalance_response={
+    ...         "probes": {
+    ...             "node": [22, 39],
+    ...             "orientation": [90, 90],
+    ...             "unit": "degree",  # defines the orientation unit
+    ...         },
+    ...         "frequency_range": np.linspace(100, 1200, 101),  # must be in rad/s
+    ...         "frequency_units": "rpm",  # defines the output unit for frequency_range
+    ...         "plot_deflected_shape": {"speed": [815]},
+    ...     },
+    ... )
+    >>> configs["rotor_properties"]["rotor_id"] # doctest: +ELLIPSIS
+    {"type": "turbine", "tag": "Model"}...
+
+    >>> configs["run_campbell"]["frequency_units"]
+    'rpm'
     """
 
     def __init__(self):
@@ -424,7 +457,6 @@ class Config:
             "rotor_length_units": "m",
             "plot_deflected_shape": {
                 "speed": [],
-                "speed_units": "rad/s",
             },
         })
 
