@@ -676,9 +676,8 @@ class Report:
         minspeed = self.config.rotor_properties.rotor_speeds.min_speed
         speed_factor = self.config.rotor_properties.rotor_speeds.speed_factor
         speed_unit = self.config.rotor_properties.rotor_speeds.unit
-        plot_speeds = self.config.run_unbalance_response.plot_deflected_shape.speed
-        spd_unit = self.config.run_unbalance_response.plot_deflected_shape.speed_units
 
+        plot_speeds = self.config.run_unbalance_response.plot_deflected_shape.speed
         freq_range = self.config.run_unbalance_response.frequency_range
         modes = self.config.run_unbalance_response.modes
         cluster_points = self.config.run_unbalance_response.cluster_points
@@ -691,13 +690,13 @@ class Report:
         phase_units = self.config.run_unbalance_response.phase_units
         rotor_length_units = self.config.run_unbalance_response.rotor_length_units
 
-        maxspeed = Q_(maxspeed, speed_unit).to(frequency_units).m
-        minspeed = Q_(minspeed, speed_unit).to(frequency_units).m
-
         if freq_range is None and not cluster_points:
             freq_range = np.linspace(
                 0, speed_factor * Q_(maxspeed, speed_unit).to("rad/s").m, 201
             )
+
+        maxspeed = Q_(maxspeed, speed_unit).to("rad/s").m
+        minspeed = Q_(minspeed, speed_unit).to("rad/s").m
 
         # returns de nodes where forces will be applied
         node_max, node_min = self._mode_shape(mode)
@@ -788,7 +787,7 @@ class Report:
                     SM_ref = "None"
 
                 # amplitude limit (A1) - API684 - SP6.8.2.11
-                A1 = 25.4 * np.sqrt(12000 / Q_(maxspeed, speed_unit).to("rpm")) * 1e-6
+                A1 = 25.4 * np.sqrt(12000 / Q_(maxspeed, "rad/s").to("rpm")) * 1e-6
                 A1 = Q_(A1, "m").to(amplitude_units).m
                 Amax = max(data.y)
 
@@ -805,6 +804,8 @@ class Report:
             unbalance_dict["probe {}".format(k + 1)] = _dict
             k += 1
 
+        maxspeed = Q_(maxspeed, "rad/s").to(frequency_units).m
+        minspeed = Q_(minspeed, "rad/s").to(frequency_units).m
         customdata = [minspeed, maxspeed]
         max_amplitude = np.amax(np.array([data.y for data in fig.data]))
         plot.add_trace(
@@ -834,7 +835,7 @@ class Report:
         plot_shapes = [
             response.plot_deflected_shape(
                 speed=speed,
-                frequency_units=spd_unit,
+                frequency_units=frequency_units,
                 displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
                 subplot_kwargs=dict(width=800, height=600),
