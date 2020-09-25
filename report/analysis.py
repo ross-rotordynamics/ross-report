@@ -838,7 +838,6 @@ class Report:
                 frequency_units=frequency_units,
                 displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
-                subplot_kwargs=dict(width=800, height=600),
             )
             for speed in plot_speeds
         ]
@@ -884,10 +883,8 @@ class Report:
         xn, yn, zn, xc, yc, zc_pos, nn = modal.calc_mode_shape(mode=mode)
 
         # reduce 3D view to 2D view
-        vn = np.zeros(len(zn))
-        for i in range(len(zn)):
-            theta = np.arctan(xn[i] / yn[i])
-            vn[i] = xn[i] * np.sin(theta) + yn[i] * np.cos(theta)
+        theta = np.arctan(xn[0] / yn[0])
+        vn = xn * np.sin(theta) + yn * np.cos(theta)
 
         # remove repetitive values from zn and vn
         idx_remove = []
@@ -902,8 +899,8 @@ class Report:
 
         if self.rotor_type == "between_bearings":
 
-            aux_idx_max = argrelextrema(vn, np.greater)[0].tolist()
-            aux_idx_min = argrelextrema(vn, np.less)[0].tolist()
+            aux_idx_max = argrelextrema(vn, np.greater, order=nn)[0].tolist()
+            aux_idx_min = argrelextrema(vn, np.less, order=nn)[0].tolist()
 
             # verification of rigid modes
             if len(aux_idx_max) == 0 and len(aux_idx_min) == 0:
@@ -918,6 +915,12 @@ class Report:
                         idx_max += 1
                 node_max = np.round(np.array([idx_max]) / nn)
                 node_min = np.round(np.array([idx_min]) / nn)
+
+            if mode in [2, 3] and len(aux_idx_max) == 0:
+                aux_idx_max = [np.argmax(vn)]
+
+            if mode in [2, 3] and len(aux_idx_min) == 0:
+                aux_idx_max = [np.argmin(vn)]
 
             if len(aux_idx_min) != 0:
                 idx_min = np.where(vn == min(vn[aux_idx_min]))[0].tolist()
