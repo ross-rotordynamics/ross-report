@@ -230,6 +230,7 @@ class Report:
 
         self.tag = config.rotor_properties.rotor_id.tag
         self.config = config
+        self.case = "oper_clearance"
 
     @staticmethod
     def _rotor_instance(rotor, bearing_list):
@@ -313,9 +314,14 @@ class Report:
             "min_clearance": {},
             "max_clearance": {},
         }
-
+        self.results = dict(
+            oper_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+            min_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+            max_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+        )
         # loop through bearings clearance
         for k, bearings in self.config.bearings.__dict__.items():
+            self.case = k
             if bearings is None:
                 warnings.warn(
                     f"Option '{k}' is empty. No analyses are performed for {k} bearings."
@@ -357,14 +363,17 @@ class Report:
                 results_dict[k]["stability_level1"] = self._stability_level_1()
 
                 # stability level 2 dataframe
-                if self.condition:
+                if not self.results[self.case]["lvl1"]:
                     df_lvl2 = self._stability_level_2()
                     results_dict[k]["stability_level2"] = df_lvl2
+                    self.results[k]["lvl1"] = False
                 else:
                     results_dict[k]["stability_level2"] = None
+                    self.results[k]["lvl1"] = True
 
                 # Summary tables
                 results_dict[k]["summary"] = self._summary()
+                results_dict[k]["verification_keys"] = self.results[k]
 
         self.rotor = rotor
 
@@ -669,7 +678,7 @@ class Report:
         Example
         -------
         >>> import report as rp
-        >>> report = rp.report_example()
+        >>> report = report_example()
         >>> fig, plot_shapes, unbalance_dict = report._unbalance_response(mode=0)
         """
         maxspeed = self.config.rotor_properties.rotor_speeds.max_speed
@@ -785,6 +794,12 @@ class Report:
                 else:
                     SM = "None"
                     SM_ref = "None"
+
+                if SM is not None:
+                    if SM_ref < SM:
+                        self.results[self.case]["unbalance_response"] = False
+                    else:
+                        self.results[self.case]["unbalance_response"] = True
 
                 # amplitude limit (A1) - API684 - SP6.8.2.11
                 A1 = 25.4 * np.sqrt(12000 / Q_(maxspeed, "rad/s").to("rpm")) * 1e-6
@@ -1332,23 +1347,23 @@ class Report:
 
         if machine_type == "compressor":
             if Q0 / Qa < 2.0:
-                condition = True
+                self.results[self.case]["lvl1"] = False
 
             elif log_dec_a < 0.1:
-                condition = True
+                self.results[self.case]["lvl1"] = False
 
             elif 2.0 < Q0 / Qa < 10.0 and CSR > CSR_boundary[idx]:
-                condition = True
+                self.results[self.case]["lvl1"] = False
 
             else:
-                condition = False
+                self.results[self.case]["lvl1"] = True
 
         if machine_type == "turbine" or machine_type == "axial_flow":
             if log_dec_a < 0.1:
-                condition = True
+                self.results[self.case]["lvl1"] = False
 
             else:
-                condition = False
+                self.results[self.case]["lvl1"] = True
 
         # updating attributes
         self.Q0 = Q0
@@ -1358,7 +1373,6 @@ class Report:
         self.Qratio = Q0 / Qa
         self.crit_speed = crit_speed
         self.rho_gas = RHO_mean
-        self.condition = condition
 
         return fig1, fig2
 
@@ -1492,6 +1506,11 @@ class Report:
         self.df_logdec_full = df_logdec_full
         self.df_logdec = df_logdec
 
+        if all(logdec >= 0.1 for logdec in log_dec_full):
+            self.results[self.case]["lvl2"] = True
+        else:
+            self.results[self.case]["lvl2"] = False
+
         return df_logdec
 
     def _summary(self):
@@ -1530,7 +1549,7 @@ class Report:
         )
         df_stab_lvl1 = pd.DataFrame(stab_lvl1_data)
 
-        if self.condition:
+        if self.results[self.case]["lvl1"]:
             stab_lvl2_data = dict(
                 tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
             )
