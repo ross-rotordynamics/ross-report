@@ -376,7 +376,7 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report0.crit_speed, 113.15518508670297, atol=1e-4)
     assert_allclose(report0.MCS, 1000.0, atol=1e-4)
     assert_allclose(report0.rho_gas, 34.05, atol=1e-4)
-    assert report0.condition == True
+    assert report0.results[report0.case]["lvl1"] is False
 
     _ = report1._stability_level_1()
 
@@ -388,7 +388,7 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report1.crit_speed, 100.73220008630899, atol=1e-4)
     assert_allclose(report1.MCS, 1000.0, atol=1e-4)
     assert_allclose(report1.rho_gas, 34.05, atol=1e-4)
-    assert report1.condition == True
+    assert report1.results[report1.case]["lvl1"] is False
 
     _ = report2._stability_level_1()
 
@@ -400,7 +400,7 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report2.crit_speed, 85.34314910322335, atol=1e-4)
     assert_allclose(report2.MCS, 9550.0, atol=1e-4)
     assert_allclose(report2.rho_gas, 34.05, atol=1e-4)
-    assert report2.condition == False
+    assert report2.results[report2.case]["lvl1"] is True
 
 
 def test_stability_level2(report0, report1, report2):
