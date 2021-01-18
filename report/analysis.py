@@ -1554,7 +1554,7 @@ class Report:
         )
         df_stab_lvl1 = pd.DataFrame(stab_lvl1_data)
 
-        if self.results[self.case]["lvl1"]:
+        if self.results[self.case]["lvl1"] is False:
             stab_lvl2_data = dict(
                 tags=self.df_logdec["tags"], logdec=self.df_logdec["log_dec"]
             )
@@ -1599,7 +1599,7 @@ class Report:
             "<b>Gas Density</b>",
         ]
 
-        if self.condition:
+        if self.results[self.case]["lvl1"] is False:
             fig = make_subplots(
                 rows=2,
                 cols=1,
@@ -1638,7 +1638,7 @@ class Report:
             col=1,
         )
 
-        if self.condition:
+        if self.results[self.case]["lvl1"] is False:
             stab_lvl2_data["logdec"] = np.round(stab_lvl2_data["logdec"], 4)
             stab_lvl2_titles = ["<b>Components</b>", "<b>Log. Dec.</b>"]
 
