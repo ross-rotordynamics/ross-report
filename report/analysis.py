@@ -231,6 +231,11 @@ class Report:
         self.tag = config.rotor_properties.rotor_id.tag
         self.config = config
         self.case = "oper_clearance"
+        self.results = dict(
+            oper_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+            min_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+            max_clearance=dict(lvl1=None, lvl2=None, unbalance_response=None),
+        )
 
     @staticmethod
     def _rotor_instance(rotor, bearing_list):
