@@ -7,6 +7,17 @@ import report
 
 
 class CSS:
+    """CSS archive for the report.
+
+    - Generate the CSS configuration for the report.
+
+    Parameters
+    ----------
+    path : string
+    The path where the CSS file will be created. By default, it will be created at the report path, with the
+    name style.css
+    """
+
     def __init__(self, path=Path(report.__file__).parent / "style.css"):
         self.path = Path(path)
 
@@ -20,20 +31,49 @@ class CSS:
 
 
 class Content:
+    """Content of a CSS File.
+    - Generate the content of a CSS file for the report.
+    """
     def __init__(self):
         pass
 
     def render_html_str(self):
+        """Generate a string in HTML format with the strucutre of the content.
+
+                Returns
+                -------
+                html : string
+                The string containing the HTML of the Content
+                """
         pass
 
 
 class Text(Content):
+    """Block of text in the report.
+
+        - Generate the HTML string of a text block for the report.
+
+        Parameters
+        ----------
+        text : string
+        The content of the text, that will be inserted into the text block.
+
+        style : string
+        The style of the text that will be shown.
+        """
     def __init__(self, text, style=""):
         super().__init__()
         self.text = text
         self.style = style
 
     def render_html_str(self):
+        """Generate a string in HTML format with the strucutre of a text block.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the Text block
+        """
         html = f"""
                 <div class="row offset-2">\n
                     <div class="col-9 mt-3 mb-0 pb-0">\n
@@ -47,12 +87,27 @@ class Text(Content):
 
 
 class Img(Content):
-    """"""
+    """Images that will be imported on the report.
+
+    - Generate the html code of an image that will be shown on the report of the analysis.
+
+    Parameters
+    ----------
+    path_to_img : string
+    The path where the image is.
+    """
 
     def __init__(self, path_to_img):
         self.path_to_img = Path(path_to_img)
 
     def render_html_str(self):
+        """Generate a string in HTML format with an image.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the Image to be inserted in a Content.
+        """
         html = ""
         return html
 
@@ -61,13 +116,27 @@ class Img(Content):
 
 
 class Title(Content):
-    """"""
+    """Title of a content on the report.
+
+    - Generate the html code of a title that will be shown on top of a content  on the report.
+    Parameters
+    ----------
+    title : string
+    The title of a content.
+    """
 
     def __init__(self, title):
         self.title = title
         self.id = title
 
     def render_html_str(self):
+        """Generate a string in HTML format with a content Title.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the title to be inserted in a Content.
+        """
         html = f"""
         <div class="row offset-2">
             <div class="col-9">
@@ -82,7 +151,15 @@ class Title(Content):
 
 
 class Page:
-    """"""
+    """Page of the report.
+
+    - Generate the html code of each page of the report.
+
+    Parameters
+    ----------
+    content : Content
+    The content that will be inserted in the page.
+    """
 
     def __init__(
         self,
@@ -108,6 +185,18 @@ class Page:
                 self._figures.append(item)
 
     def render_html_str(self, figures_list):
+        """Generate a string in HTML format with a page of the report.
+
+        Parameters
+        ---------
+        figures_list : List
+        A list of images that will be inserted on the page.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of a report page.
+        """
         html = ""
         for item in self.content:
             if isinstance(item, PlotlyFigure):
@@ -122,6 +211,18 @@ class Page:
 
 
 class PlotlyFigure(Content):
+    """Plotly figure to be inserted in a content of the report.
+
+    - Generate the html code of each page of the report.
+
+    Parameters
+    ----------
+    figure : Any
+    The figure that will be inserted on the report.
+
+    id : str
+    The plotly figure id.
+    """
     def __init__(self, figure, width=900, id=""):
         self.figure = figure
         self.figure.update_layout(width=width)
@@ -129,6 +230,16 @@ class PlotlyFigure(Content):
         self.width = width
 
     def render_html_str(self):
+        """Generate a string in HTML format that sets a plotly figure on the report.
+
+        Parameters
+        ---------
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of a plotly figure.
+        """
         html = f"""
         <div style="width: {self.figure.layout["width"]}px;height: {self.figure.layout["height"]}px" class="mx-auto" id="{self.id}">\n
             {self.figure.to_html(full_html=False)}
@@ -139,11 +250,30 @@ class PlotlyFigure(Content):
 
 
 class Table(Content):
+    """Table of contents to be inserted in the report.
+
+    - Generate the html code of the report table of content.
+
+    Parameters
+    ----------
+    pandas_data_frame : Any
+    The data frame of the content table.
+
+    width : Any
+    the width of the content table.
+    """
     def __init__(self, pandas_data_frame, width):
         self.table = pandas_data_frame
         self.width = width
 
     def render_html_str(self):
+        """Generate a string in HTML format that creates a content table on the report.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of a content table.
+        """
         html = f"""
         <div style="width: {self.width}px;" class="mx-auto">\n
             {self.table.to_html(classes="table table-striped table-hover table-responsive")}
@@ -153,6 +283,15 @@ class Table(Content):
 
 
 class Listing(Content):
+    """List to be inserted on the report.
+
+    - Generate the html code of a elements list for the analysis report.
+
+    Parameters
+    ----------
+    items : Any
+    The items that will be listed.
+    """
     def __init__(self, items):
         self.items = items
 
@@ -160,6 +299,14 @@ class Listing(Content):
         return str(self.render_html_str())
 
     def render_html_str(self):
+        """Generate a string in HTML format that creates a list of elements on the report.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of a list.
+        """
+
         html = """
         <div class="offset-2 mb-4 row">
                 <div class="col-9">
@@ -178,6 +325,24 @@ class Listing(Content):
 
 
 class Link(Content):
+    """Link to be inserted on the report.
+
+        - Generate the html code of any link for the analysis report.
+
+        Parameters
+        ----------
+        title : Any
+        The text of the link.
+
+        href : str
+        The URL of the link.
+
+        style : str
+        The style of the link text.
+
+        internal : bool
+        A boolean value that marks if the link URL is intern or extern the report.
+        """
     def __init__(self, title, href, style="", internal=True):
         self.href = href
         self.title = title
@@ -185,9 +350,22 @@ class Link(Content):
         self.style = style
 
     def render_html_str(self):
+        """Generate a string in HTML format that creates a link on the report.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of a link.
+        """
         return f"""<a style="{self.style}" class="text-justify" href = "{self._internal()}{self.href}">{self.title}</a>"""
 
     def _internal(self):
+        """Adapts the link URL if the link is internal.
+
+        Returns
+        -------
+        returns a # character to be inserted on the link if the field internal of this instance is True.
+        """
         if self.internal:
             return "#"
         else:
@@ -201,7 +379,26 @@ class Link(Content):
 
 
 class Layout:
-    """Report Layout"""
+    """Layout strucute of the analysis report.
+
+        - Generate the html entire report layout.
+
+        Parameters
+        ----------
+        summary : bool
+        Appoints whether the report has a summary or not.
+
+        figures_list_ref : bool
+        Appoints whether the report has a figures list or not.
+
+        css : CSS
+        The css of the report.
+
+        pages : Any
+        Contains a page if the report has only one page, a list of pages if the report has more than one and none if
+        it has no extra pages
+        """
+
 
     def __init__(
         self,
@@ -241,6 +438,13 @@ class Layout:
         return str(rep)
 
     def summary_renderer(self):
+        """Generate a string in HTML format that forms the entire summary structure.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the report summary.
+        """
         layout_titles = []
         for page in self.pages:
             for title in page._titles:
@@ -261,6 +465,13 @@ class Layout:
         return summary
 
     def figures_list_renderer(self):
+        """Generate a string in HTML format that forms the structure of the report figures.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the report figures.
+        """
         content = [Title("Figures List")]
         image_titles = []
         for figure in range(len(self.figures_list)):
@@ -273,6 +484,13 @@ class Layout:
         return content
 
     def render_pages(self, figures_list_ref=True):
+        """Generate a string in HTML format that forms the structure of each report page.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the report pages.
+        """
         html = ""
 
         if self.summary is True:
@@ -303,6 +521,13 @@ class Layout:
         return html
 
     def render_html_str(self):
+        """Generate a string in HTML format that forms the entire report structure.
+
+        Returns
+        -------
+        html : string
+        The string containing the HTML of the report entirely.
+        """
         rendered_pages = self.render_pages(figures_list_ref=self.figures_list_ref)
         summary = self.summary_renderer()
         html = (
