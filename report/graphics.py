@@ -149,6 +149,7 @@ class Table(Content):
             {self.table.to_html(classes="table table-striped table-hover table-responsive")}
         </div>
         """
+        html = html.replace('&amp;#',"&#")
         return html
 
 
