@@ -96,6 +96,7 @@ class Page:
         self.content = content
         self._titles = []
         self._figures = []
+        self._tables = []
         content = []
         for item in self.content:
             if isinstance(item, str):
@@ -106,8 +107,10 @@ class Page:
                 self._titles.append(item)
             if isinstance(item, PlotlyFigure) or isinstance(item, Img):
                 self._figures.append(item)
+            if isinstance(item, Table):
+                self._tables.append(item)
 
-    def render_html_str(self, figures_list):
+    def render_html_str(self, figures_list, tables_list):
         html = ""
         for item in self.content:
             if isinstance(item, PlotlyFigure):
@@ -116,9 +119,15 @@ class Page:
                     item.figure, item.width, id="Figure " + f"{figure_numb}"
                 )
                 figures_list.append(item)
+            elif isinstance(item, Table):
+                table_numb = len(tables_list)
+                item = Table(
+                    item.table, item.width, id="Table " + f"{table_numb}"
+                )
+                tables_list.append(item)
             html += item.render_html_str()
 
-        return html, figures_list
+        return html, figures_list, tables_list
 
 
 class PlotlyFigure(Content):
@@ -128,27 +137,31 @@ class PlotlyFigure(Content):
         self.id = id
         self.width = width
 
-    def render_html_str(self):
+    def render_html_str(self, legend=""):
         html = f"""
         <div style="width: {self.figure.layout["width"]}px;height: {self.figure.layout["height"]}px" class="mx-auto" id="{self.id}">\n
             {self.figure.to_html(full_html=False)}
         </div>
         """
+        html += legend
 
         return html
 
 
 class Table(Content):
-    def __init__(self, pandas_data_frame, width):
+    def __init__(self, pandas_data_frame, width, id=""):
         self.table = pandas_data_frame
         self.width = width
+        self.id = id
 
-    def render_html_str(self):
-        html = f"""
-        <div style="width: {self.width}px;" class="mx-auto">\n
+    def render_html_str(self, legend=""):
+        html = legend
+        html += f"""
+        <div style="width: {self.width}px;" class="mx-auto" id="{self.id}">\n
             {self.table.to_html(classes="table table-striped table-hover table-responsive")}
         </div>
         """
+        html = html.replace('&amp;#', '&#')
         return html
 
 
@@ -206,6 +219,7 @@ class Layout:
     def __init__(
         self,
         summary=True,
+        tables_list_ref=True,
         figures_list_ref=True,
         css=CSS(),
         pages=None,
@@ -228,8 +242,12 @@ class Layout:
         self.main_title = main_title
 
         self.summary = summary
+
         self.figures_list = []
         self.figures_list_ref = figures_list_ref
+
+        self.tables_list = []
+        self.tables_list_ref = tables_list_ref
 
     def __repr__(self):
         rep = {}
@@ -247,7 +265,8 @@ class Layout:
                 layout_titles.append(Link(title=title.title, href=title.title))
         if self.figures_list_ref:
             layout_titles.append(Link(title="Figures List", href="Figures List"))
-
+        if self.tables_list_ref:
+            layout_titles.append(Link(title="Tables List", href="Tables List"))
         summary = f"""
             <div class="mt-4 pb-4 offset-2 row">
                 <div class="col-9">
@@ -268,34 +287,55 @@ class Layout:
                 Link(title=f"Figure {figure + 1}", href=f"Figure {figure}")
             )
         content.append(Listing(image_titles))
-        print(len(self.figures_list))
 
         return content
 
-    def render_pages(self, figures_list_ref=True):
+    def tables_list_renderer(self):
+        content = [Title("Tables List")]
+        tables_titles = []
+        for table in range(len(self.tables_list)):
+            tables_titles.append(
+                Link(title=f"Table {table + 1}", href=f"Table {table}")
+            )
+        content.append(Listing(tables_titles))
+
+        return content
+
+    def render_pages(self, tables_list_ref=True, figures_list_ref=True):
         html = ""
 
         if self.summary is True:
 
             if isinstance(self.pages, list):
                 figures_list = []
+                tables_list = []
+
                 for page in range(len(self.pages)):
                     rendered_page = self.pages[page].render_html_str(
-                        figures_list=figures_list
+                        figures_list=figures_list,
+                        tables_list=tables_list
                     )
+
                     html += rendered_page[0]
                     figures_list = rendered_page[1]
+                    tables_list = rendered_page[2]
 
                     if page != len(self.pages) - 1:
                         html += """<<p class="page-break-before" style="page-break-before: always" /> \n>"""
 
-                    elif figures_list_ref:
+                    if figures_list_ref:
                         self.figures_list = figures_list
                         rendered_page = Page(
                             content=self.figures_list_renderer()
-                        ).render_html_str(figures_list=figures_list)
+                        ).render_html_str(figures_list=figures_list, tables_list=tables_list)
                         html += rendered_page[0]
-                        print(len(figures_list))
+
+                    if tables_list_ref:
+                        self.tables_list = tables_list
+                        rendered_page = Page(
+                            content=self.tables_list_renderer()
+                        ).render_html_str(figures_list=figures_list, tables_list=tables_list)
+                        html += rendered_page[0]
 
             elif isinstance(self.pages, Page):
                 html += self.pages.render_html_str()
@@ -303,7 +343,7 @@ class Layout:
         return html
 
     def render_html_str(self):
-        rendered_pages = self.render_pages(figures_list_ref=self.figures_list_ref)
+        rendered_pages = self.render_pages(figures_list_ref=self.figures_list_ref, tables_list_ref=self.tables_list_ref)
         summary = self.summary_renderer()
         html = (
             """
