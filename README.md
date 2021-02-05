@@ -1,5 +1,5 @@
 # ROSS Report
-[![Build status](https://ci.appveyor.com/api/projects/status/5s4tdwsm7nk519go/branch/master?svg=true)](https://ci.appveyor.com/project/GabrielBachmannArimCarneirodeAlbuquerque/ross-report/branch/master)
+![github actions](https://github.com/ross-rotordynamics/ross-report/workflows/Test/badge.svg)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 This package aims to build a report for [ROSS](https://github.com/ross-rotordynamics/ross), a rotordynamics python package.
