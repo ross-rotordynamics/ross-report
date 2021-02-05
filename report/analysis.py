@@ -1389,7 +1389,7 @@ class Report:
             response.plot_deflected_shape(
                 speed=speed,
                 frequency_units=frequency_units,
-                amplitude_units=amplitude_units,
+                displacement_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
             )
             for speed in plot_speeds
