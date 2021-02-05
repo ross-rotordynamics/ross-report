@@ -17,7 +17,9 @@ from ross.shaft_element import ShaftElement
 from ross.units import Q_
 from scipy.interpolate import interp1d
 from scipy.signal import argrelextrema
+
 from .graphics import *
+
 # fmt: on
 
 # set Plotly palette of colors
@@ -625,45 +627,50 @@ class Report:
                     Each individual result obtained in this report is summarized in the following table.
 
                     """
-            )
+            ),
         )
 
-        introduction = [Title("Introduction"),
-                        Text(Introduction["intro"]),
-                        PlotlyFigure(rotor.plot_rotor())
-                        ]
+        introduction = [
+            Title("Introduction"),
+            Text(Introduction["intro"]),
+            PlotlyFigure(rotor.plot_rotor()),
+        ]
 
-        static_analysis = [Title("Static Analysis"),
-                           Text(Static_analysis["intro"]),
-                           PlotlyFigure(results['static_analysis'][0]),
-                           Text(
-                               "Figure XXXX shows the free-body diagram representation, where Fd stands for Disk weight and Fb stands for bearing reaction forces.",
-                               style="text-align:center"),
-                           PlotlyFigure(results['static_analysis'][1]),
-                           PlotlyFigure(results['static_analysis'][2]),
-                           PlotlyFigure(results['static_analysis'][3]),
-                           ]
+        static_analysis = [
+            Title("Static Analysis"),
+            Text(Static_analysis["intro"]),
+            PlotlyFigure(results["static_analysis"][0]),
+            Text(
+                "Figure XXXX shows the free-body diagram representation, where Fd stands for Disk weight and Fb stands for bearing reaction forces.",
+                style="text-align:center",
+            ),
+            PlotlyFigure(results["static_analysis"][1]),
+            PlotlyFigure(results["static_analysis"][2]),
+            PlotlyFigure(results["static_analysis"][3]),
+        ]
 
-        undamped_critical_speed_map = [Title("Undamped Critical Speed Map"),
-                                       Text(Undamped_Critical_Speed_Map['intro'])]
+        undamped_critical_speed_map = [
+            Title("Undamped Critical Speed Map"),
+            Text(Undamped_Critical_Speed_Map["intro"]),
+        ]
 
-        damped_critical_speed_map = [Title("Damped Critical Speed Map"),
-                                     Text(Damped_Critical_Speed_Map['intro'])]
+        damped_critical_speed_map = [
+            Title("Damped Critical Speed Map"),
+            Text(Damped_Critical_Speed_Map["intro"]),
+        ]
 
-        unbalance_response = [Title("Unbalance Response"),
-                              Text(Unbalance_Response['intro'])]
+        unbalance_response = [
+            Title("Unbalance Response"),
+            Text(Unbalance_Response["intro"]),
+        ]
 
-        deflected_shape = [Title("Deflected Shape"),
-                           Text(Deflected_Shape['intro'])]
+        deflected_shape = [Title("Deflected Shape"), Text(Deflected_Shape["intro"])]
 
-        modal_analysis = [Title('Mode Shapes'),
-                          Text(Mode_Shapes['intro'])]
+        modal_analysis = [Title("Mode Shapes"), Text(Mode_Shapes["intro"])]
 
-        level_1_analysis = [Title("Level 1 Analysis"),
-                            Text(Level_1_Analysis['intro'])]
+        level_1_analysis = [Title("Level 1 Analysis"), Text(Level_1_Analysis["intro"])]
 
-        level_2_analysis = [Title("Level 2 Analysis"),
-                            Text(Level_2_Analysis['intro'])]
+        level_2_analysis = [Title("Level 2 Analysis"), Text(Level_2_Analysis["intro"])]
 
         bearings = ["min_clearance", "oper_clearance", "max_clearance"]
 
@@ -671,29 +678,57 @@ class Report:
             if {} == results[bearing]:
                 bearings.remove(bearing)
             else:
-                undamped_critical_speed_map.extend([PlotlyFigure(results[bearing]['ucs_map']),
-                                                    Text(Undamped_Critical_Speed_Map[bearing])])
+                undamped_critical_speed_map.extend(
+                    [
+                        PlotlyFigure(results[bearing]["ucs_map"]),
+                        Text(Undamped_Critical_Speed_Map[bearing]),
+                    ]
+                )
 
-                damped_critical_speed_map.extend([PlotlyFigure(results[bearing]['dcs_map']),
-                                                  Text(Damped_Critical_Speed_Map[bearing]), ])
+                damped_critical_speed_map.extend(
+                    [
+                        PlotlyFigure(results[bearing]["dcs_map"]),
+                        Text(Damped_Critical_Speed_Map[bearing]),
+                    ]
+                )
 
-                unbalance_response.extend([Text(Unbalance_Response[bearing]),
-                                           PlotlyFigure(results[bearing]['unbalance_response'][0]),
-                                           PlotlyFigure(results[bearing]['unbalance_response'][1]),
-                                           Table(results[bearing]['unbalace_summary'][0], width=300), ])
+                unbalance_response.extend(
+                    [
+                        Text(Unbalance_Response[bearing]),
+                        PlotlyFigure(results[bearing]["unbalance_response"][0]),
+                        PlotlyFigure(results[bearing]["unbalance_response"][1]),
+                        Table(results[bearing]["unbalace_summary"][0], width=300),
+                    ]
+                )
 
-                deflected_shape.extend([PlotlyFigure(results[bearing]['deflected_shape'][0][0]),
-                                        Text(Deflected_Shape[bearing]), ])
+                deflected_shape.extend(
+                    [
+                        PlotlyFigure(results[bearing]["deflected_shape"][0][0]),
+                        Text(Deflected_Shape[bearing]),
+                    ]
+                )
 
-                modal_analysis.extend([PlotlyFigure(results[bearing]['mode_shape'][0]),
-                                       Text(Mode_Shapes[bearing]), ])
+                modal_analysis.extend(
+                    [
+                        PlotlyFigure(results[bearing]["mode_shape"][0]),
+                        Text(Mode_Shapes[bearing]),
+                    ]
+                )
 
-                level_1_analysis.extend([PlotlyFigure(results[bearing]['stability_level1'][0]),
-                                         PlotlyFigure(results[bearing]['stability_level1'][1]),
-                                         Text(Level_1_Analysis[bearing]), ])
+                level_1_analysis.extend(
+                    [
+                        PlotlyFigure(results[bearing]["stability_level1"][0]),
+                        PlotlyFigure(results[bearing]["stability_level1"][1]),
+                        Text(Level_1_Analysis[bearing]),
+                    ]
+                )
 
-                level_2_analysis.extend([Table(results[bearing]['stability_level2'], width=300),
-                                         Text(Level_2_Analysis[bearing]), ])
+                level_2_analysis.extend(
+                    [
+                        Table(results[bearing]["stability_level2"], width=300),
+                        Text(Level_2_Analysis[bearing]),
+                    ]
+                )
 
         passes = True
 
@@ -706,52 +741,68 @@ class Report:
 
         table_keys = table.keys()
 
-        conclusion_table = Table(pd.DataFrame(
-            {
-                "Level 1 Analysis": [r"&#10004;&#65039;" if table[table_key]["lvl1"] else r"&#10060;" for table_key in
-                                     table_keys],
-
-                "Level 2 Analysis": [r"&#10004;&#65039;" if table[table_key]["lvl2"] else r"&#10060;" for table_key in
-                                     table_keys],
-
-                "Unbalance Response": [r"&#10004;&#65039;" if table[table_key]["unbalance_response"] else r"&#10060;"
-                                       for table_key in table_keys],
-
-                "Level 1 Analysis": [r"&#10004;&#65039;" if table[table_key]["lvl1"] else r"&#10060;" for table_key in
-                                     table_keys],
-
-                "Level 2 Analysis": [r"&#10004;&#65039;" if table[table_key]["lvl2"] else r"&#10060;" for table_key in
-                                     table_keys],
-
-                "Unbalance Response": [r"&#10004;&#65039;" if table[table_key]["unbalance_response"] else r"&#10060;"
-                                       for table_key in table_keys],
-            },
-            index=list(table_keys)
-
-        ), width=500)
+        conclusion_table = Table(
+            pd.DataFrame(
+                {
+                    "Level 1 Analysis": [
+                        r"&#10004;&#65039;" if table[table_key]["lvl1"] else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                    "Level 2 Analysis": [
+                        r"&#10004;&#65039;" if table[table_key]["lvl2"] else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                    "Unbalance Response": [
+                        r"&#10004;&#65039;"
+                        if table[table_key]["unbalance_response"]
+                        else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                    "Level 1 Analysis": [
+                        r"&#10004;&#65039;" if table[table_key]["lvl1"] else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                    "Level 2 Analysis": [
+                        r"&#10004;&#65039;" if table[table_key]["lvl2"] else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                    "Unbalance Response": [
+                        r"&#10004;&#65039;"
+                        if table[table_key]["unbalance_response"]
+                        else r"&#10060;"
+                        for table_key in table_keys
+                    ],
+                },
+                index=list(table_keys),
+            ),
+            width=500,
+        )
 
         if passes:
-            conclusion = [Title('Conclusion'),
-                          Text(Conclusion['Pass']),
-                          conclusion_table,
-                          ]
+            conclusion = [
+                Title("Conclusion"),
+                Text(Conclusion["Pass"]),
+                conclusion_table,
+            ]
         else:
-            conclusion = [Title('Conclusion'),
-                          Text(Conclusion['Not_Pass']),
-                          conclusion_table,
-                          ]
+            conclusion = [
+                Title("Conclusion"),
+                Text(Conclusion["Not_Pass"]),
+                conclusion_table,
+            ]
 
-        page_1 = Page(content=introduction +
-                              static_analysis +
-                              undamped_critical_speed_map +
-                              damped_critical_speed_map +
-                              modal_analysis +
-                              unbalance_response +
-                              deflected_shape +
-                              level_1_analysis +
-                              level_2_analysis +
-                              conclusion
-                      )
+        page_1 = Page(
+            content=introduction
+            + static_analysis
+            + undamped_critical_speed_map
+            + damped_critical_speed_map
+            + modal_analysis
+            + unbalance_response
+            + deflected_shape
+            + level_1_analysis
+            + level_2_analysis
+            + conclusion
+        )
 
         layout = Layout(pages=page_1)
 
