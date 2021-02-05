@@ -121,9 +121,7 @@ class Page:
                 figures_list.append(item)
             elif isinstance(item, Table):
                 table_numb = len(tables_list)
-                item = Table(
-                    item.table, item.width, id="Table " + f"{table_numb}"
-                )
+                item = Table(item.table, item.width, id="Table " + f"{table_numb}")
                 tables_list.append(item)
             html += item.render_html_str()
 
@@ -162,7 +160,7 @@ class Table(Content):
         </div>
         """
 
-        html = html.replace('&amp;#', '&#')
+        html = html.replace("&amp;#", "&#")
 
         return html
 
@@ -314,8 +312,7 @@ class Layout:
 
                 for page in range(len(self.pages)):
                     rendered_page = self.pages[page].render_html_str(
-                        figures_list=figures_list,
-                        tables_list=tables_list
+                        figures_list=figures_list, tables_list=tables_list
                     )
 
                     html += rendered_page[0]
@@ -329,14 +326,18 @@ class Layout:
                         self.figures_list = figures_list
                         rendered_page = Page(
                             content=self.figures_list_renderer()
-                        ).render_html_str(figures_list=figures_list, tables_list=tables_list)
+                        ).render_html_str(
+                            figures_list=figures_list, tables_list=tables_list
+                        )
                         html += rendered_page[0]
 
                     if tables_list_ref:
                         self.tables_list = tables_list
                         rendered_page = Page(
                             content=self.tables_list_renderer()
-                        ).render_html_str(figures_list=figures_list, tables_list=tables_list)
+                        ).render_html_str(
+                            figures_list=figures_list, tables_list=tables_list
+                        )
                         html += rendered_page[0]
 
             elif isinstance(self.pages, Page):
@@ -345,7 +346,9 @@ class Layout:
         return html
 
     def render_html_str(self):
-        rendered_pages = self.render_pages(figures_list_ref=self.figures_list_ref, tables_list_ref=self.tables_list_ref)
+        rendered_pages = self.render_pages(
+            figures_list_ref=self.figures_list_ref, tables_list_ref=self.tables_list_ref
+        )
         summary = self.summary_renderer()
         html = (
             """
