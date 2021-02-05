@@ -907,6 +907,7 @@ class Report:
                 else:
                     results_dict[k]["stability_level2"] = None
                     self.results[k]["lvl1"] = True
+                    self.results[k]["lvl2"] = True
 
                 # Summary tables
                 results_dict[k]["summary"] = self._summary()
@@ -1388,7 +1389,7 @@ class Report:
             response.plot_deflected_shape(
                 speed=speed,
                 frequency_units=frequency_units,
-                displacement_units=amplitude_units,
+                amplitude_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
             )
             for speed in plot_speeds
