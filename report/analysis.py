@@ -17,7 +17,9 @@ from ross.shaft_element import ShaftElement
 from ross.units import Q_
 from scipy.interpolate import interp1d
 from scipy.signal import argrelextrema
+
 from .graphics import *
+
 # fmt: on
 
 # set Plotly palette of colors
