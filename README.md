@@ -45,6 +45,7 @@ In this example we first instantiate a ross.Report, run some analysis with the a
 from report.analysis import *
 from report.graphics import *
 import ross as rs
+import numpy as np
 
 i_d = 0
 o_d = 0.05
@@ -65,10 +66,10 @@ shaft_elem = [
 ]
 
 disk0 = rs.DiskElement.from_geometry(
-    n=2, material=steel, width=0.07, i_d=0.05, o_d=0.28
+    n=2, material=rs.steel, width=0.07, i_d=0.05, o_d=0.28
 )
 disk1 = rs.DiskElement.from_geometry(
-    n=4, material=steel, width=0.07, i_d=0.05, o_d=0.28
+    n=4, material=rs.steel, width=0.07, i_d=0.05, o_d=0.28
 )
 
 stfx = [0.4e7, 0.5e7, 0.6e7, 0.7e7]
@@ -76,8 +77,8 @@ stfy = [0.8e7, 0.9e7, 1.0e7, 1.1e7]
 freq = [400, 800, 1200, 1600]
 bearing0 = rs.BearingElement(0, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
 bearing1 = rs.BearingElement(6, kxx=stfx, kyy=stfy, cxx=2e3, frequency=freq)
-
-rotor = rs.Rotor(shaft_elem, [disk0, disk1], [bearing0, bearing1])
+oper_clearance_brg = [bearing0, bearing1]
+rotor = rs.Rotor(shaft_elem, [disk0, disk1], oper_clearance_brg)
 
 # coefficients for minimum clearance
 stfx = [0.7e7, 0.8e7, 0.9e7, 1.0e7]
@@ -96,15 +97,6 @@ bearing1 = rs.BearingElement(6, kxx=stfx, cxx=dampx, frequency=freq)
 max_clearance_brg = [bearing0, bearing1]
 
 bearings = [min_clearance_brg, max_clearance_brg]
-report = Report(
-        rotor=rotor,
-        speed_range=(400, 1000),
-        tripspeed=1200,
-        bearing_stiffness_range=(5, 8),
-        bearing_clearance_lists=bearings,
-        speed_units="rad/s",
-    )
-    
 D = [0.35, 0.35]
 H = [0.08, 0.08]
 HP = [10000, 10000]
@@ -112,29 +104,60 @@ RHO_ratio = [1.11, 1.14]
 RHOd = 30.45
 RHOs = 37.65
 oper_speed = 1000.0
-data = report.run(D, H, HP, oper_speed, RHO_ratio, RHOs, RHOd)
- 
-plot_rotor_1, ucs_fig_1, mode_fig_1 = report.assets_prep(data)["figs"]
+config = rp.Config()
 
-text1 = """This is a report automatically generated using <a href= https://github.com/ross-rotordynamics/ross> ROSS</a>, a python package for rotordynamics analysis.
-<br>Below there's a graphical representation of the rotor analyzed."""
-text2 = """In this section the calculations carried out to evaluate the critical speed map and the rotor response to unbalance are described.
- The results of each calculation are shown at the end of this paragraph."""
-text3 = """The undamped critical speed analysis is carried out according to API 617 7th edition para. 2.6.2.3. The rotor system as described in Appendix 1 is used. The bearings are represented by an equivalent spring constant between rotor and pedestals, which may then be considered as elastically mounted. Isotropic, linear bearing characteristics are assumed and no damping is considered present in the system. The stiffness range selected for the calculation is such to properly describe the behavior of the rotor and provide the required information to perform the next analysis steps. The actual stiffness range (achievable by adjusting bearing clearance) is much more limited and always inside the calculation range. The rotordynamic system is solved and the undamped lateral critical speeds are calculated as a function of support equivalent stiffness over the user defined stiffness range. The results are summarized in the critical speed maps as shown in the following pages. Superimposed on the same plot are the horizontal and vertical Bearing Clearance curves (Kxx and Kzz ) either for maximum and minimum Bearing Clearance. The intersections of the vertical Bearing Clearance and critical speed curves provide the undamped critical speed values and give, in a preliminary way, a rough estimation of the critical speed and Bearing Clearance range in operation. The 1st and 2nd mode shapes for maximum and minimum Bearing Clearance are also attached, with the only intent of mode shape identification. Therefore, the vibration amplitudes are normalized with respect to the maximum level.
-"""
-page1 = Page(
-    content=[Text(text=text1),
-             PlotlyFigure(figure=plot_rotor_1),
-             Title(title="Critical Speed Analysis"),
-             Text(text=text2),
-             Title("Undamped Critical Speed Analysis"),
-             Text(text=text3),
-             ]
-             )
-page2 = Page(content=[PlotlyFigure(figure=ucs_fig_1), PlotlyFigure(figure=mode_fig_1),])
-pages = [page1, page2]
+config.update_config(
+    rotor_properties={
+        "rotor_speeds": {
+            "min_speed": 400,
+            "max_speed": 1000,
+            "oper_speed": 1000,
+            "trip_speed": 1200,
+            "unit": "rpm",
+        }
+    },
+    bearings={
+        "min_clearance": min_clearance_brg,
+        "oper_clearance": min_clearance_brg,
+        "max_clearance": max_clearance_brg,
+    },
+    run_campbell={
+        "speed_range": np.linspace(100, 1200, 91),
+        "frequency_units": "rpm",
+    },
+    run_unbalance_response={
+        "probes": {
+            "node": [0, 6],
+            "orientation": [np.pi / 2, np.pi / 2],
+            "unit": "rad",
+        },
+        "frequency_range": np.linspace(100, 1200, 101),
+        "frequency_units": "rad/s",
+        "plot_deflected_shape": {"speed": [815]},
+    },
+    plot_ucs={"stiffness_range": (6, 11)},
+    stability_level1={
+        "D": D,
+        "H": H,
+        "rated_power": HP,
+        "rho_ratio": RHO_ratio,
+        "rho_suction": RHOs,
+        "rho_discharge": RHOd,
+        "length_unit": "m",
+        "power_unit": "hp",
+        "density_unit": "kg/m**3",
+    },
+)
+report = Report(
+    rotor=rotor,
+    config=config
+)
 
-html = Layout(pages=pages).render_html_str()
+
+results = report.run_report()
+
+layout = report.generate_standard_layout_report(results)
+html = layout.render_html_str()
 
 with open("report.html", "w") as f:
     f.write(html)
