@@ -907,6 +907,7 @@ class Report:
                 else:
                     results_dict[k]["stability_level2"] = None
                     self.results[k]["lvl1"] = True
+                    self.results[k]["lvl2"] = True
 
                 # Summary tables
                 results_dict[k]["summary"] = self._summary()
