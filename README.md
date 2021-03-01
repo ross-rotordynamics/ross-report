@@ -1,6 +1,7 @@
 # ROSS Report
 ![github actions](https://github.com/ross-rotordynamics/ross-report/workflows/Test/badge.svg)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ross-rotordynamics/ross-report/master?filepath=examples%2FComplete-Example.ipynb)
 
 This package aims to build a report for [ROSS](https://github.com/ross-rotordynamics/ross), a rotordynamics python package.
 
@@ -38,3 +39,5 @@ with open("hello_world.html", "w") as f:
 
 ```
 The `hello_world.html` should look like [this](https://rawcdn.githack.com/ross-rotordynamics/ross-report/eb0d73c4462cd584f0f2ec4cc40047a91e952918/hello_world.html).
+
+A more complete example can be found [here](https://mybinder.org/v2/gh/ross-rotordynamics/ross-report/master?filepath=examples%2FComplete-Example.ipynb)
