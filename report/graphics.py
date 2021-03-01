@@ -116,12 +116,12 @@ class Page:
             if isinstance(item, PlotlyFigure):
                 figure_numb = len(figures_list)
                 item = PlotlyFigure(
-                    item.figure, item.width, id="Figure " + f"{figure_numb}"
+                    item.figure, item.width, legend=item.legend, id="Figure " + f"{figure_numb}"
                 )
                 figures_list.append(item)
             elif isinstance(item, Table):
                 table_numb = len(tables_list)
-                item = Table(item.table, item.width, id="Table " + f"{table_numb}")
+                item = Table(item.table, item.width, legend=item.legend, id="Table " + f"{table_numb}")
                 tables_list.append(item)
             html += item.render_html_str()
 
@@ -129,37 +129,58 @@ class Page:
 
 
 class PlotlyFigure(Content):
-    def __init__(self, figure, width=900, id=""):
+    def __init__(self, figure, width=900, id="", legend=""):
         self.figure = figure
         self.figure.update_layout(width=width)
         self.id = id
         self.width = width
+        self.legend = legend
 
     def render_html_str(self, legend=""):
+
         html = f"""
         <div style="width: {self.figure.layout["width"]}px;height: {self.figure.layout["height"]}px" class="mx-auto" id="{self.id}">\n
             {self.figure.to_html(full_html=False)}
         </div>
         """
-        html += legend
+
+        fig_id = self.id.split(' ')
+        fig_id[-1] = str(int(fig_id[-1])+1)
+        fig_id = ' '.join(fig_id)
+
+        html += f"""
+        <div style="width: {self.figure.layout["width"]}px;height: auto;text-align: center"  class="mx-auto">\n
+            <p class="text-center" style="font-size:11px;">{fig_id} {'- ' + self.legend if self.legend != "" else ""}</p>
+        </div>
+        """
 
         return html
 
 
 class Table(Content):
-    def __init__(self, pandas_data_frame, width, id=""):
+    def __init__(self, pandas_data_frame, width, id="", legend=""):
         self.table = pandas_data_frame
         self.width = width
         self.id = id
+        self.legend = legend
 
     def render_html_str(self, legend=""):
-        html = legend
+        html = ""
+        table_id = self.id.split(' ')
+        table_id[-1] = str(int(table_id[-1]) + 1)
+        table_id = ' '.join(table_id)
+
+        html += f"""
+                        <div style="width: {self.width}px;" class="mx-auto" id="{self.id}">\n
+                            <p class="text-center" style="font-size:11px;">{table_id} {'- ' + self.legend if self.legend != "" else ""}</p>
+                        </div>
+                        """
+
         html += f"""
         <div style="width: {self.width}px;" class="mx-auto" id="{self.id}">\n
             {self.table.to_html(classes="table table-striped table-hover table-responsive")}
         </div>
         """
-
         html = html.replace("&amp;#", "&#")
 
         return html
@@ -284,7 +305,7 @@ class Layout:
         image_titles = []
         for figure in range(len(self.figures_list)):
             image_titles.append(
-                Link(title=f"Figure {figure + 1}", href=f"Figure {figure}")
+                Link(title=f"Figure {figure + 1}" + (" - "+self.figures_list[figure].legend if self.figures_list[figure].legend != "" else ""), href=f"Figure {figure}")
             )
         content.append(Listing(image_titles))
 
@@ -295,7 +316,7 @@ class Layout:
         tables_titles = []
         for table in range(len(self.tables_list)):
             tables_titles.append(
-                Link(title=f"Table {table + 1}", href=f"Table {table}")
+                Link(title=f"Table {table + 1}"+ (" - "+self.tables_list[table].legend if self.tables_list[table].legend != "" else ""), href=f"Table {table}")
             )
         content.append(Listing(tables_titles))
 
@@ -322,7 +343,7 @@ class Layout:
                     if page != len(self.pages) - 1:
                         html += """<<p class="page-break-before" style="page-break-before: always" /> \n>"""
 
-                    if figures_list_ref:
+                    if figures_list_ref and page == 0:
                         self.figures_list = figures_list
                         rendered_page = Page(
                             content=self.figures_list_renderer()
@@ -331,7 +352,7 @@ class Layout:
                         )
                         html += rendered_page[0]
 
-                    if tables_list_ref:
+                    if tables_list_ref and page == 0:
                         self.tables_list = tables_list
                         rendered_page = Page(
                             content=self.tables_list_renderer()
