@@ -932,14 +932,14 @@ class Report:
         units = self.config.rotor_properties.rotor_speeds.unit
         frequency_units = self.config.plot_ucs.frequency_units
 
-        fig = self.rotor.plot_ucs(
+        fig = self.rotor.run_ucs(
             stiffness_range=self.config.plot_ucs.stiffness_range,
             num_modes=self.config.plot_ucs.num_modes,
             num=self.config.plot_ucs.num,
             synchronous=self.config.plot_ucs.synchronous,
             stiffness_units=self.config.plot_ucs.stiffness_units,
             frequency_units=frequency_units,
-        )
+        ).plot()
 
         _speeds = [min_speed, max_speed, oper_speed, trip_speed]
         speeds = [Q_(speed, units).to(frequency_units).m for speed in _speeds]
@@ -1327,7 +1327,7 @@ class Report:
             response.plot_deflected_shape(
                 speed=speed,
                 frequency_units=frequency_units,
-                displacement_units=amplitude_units,
+                amplitude_units=amplitude_units,
                 rotor_length_units=rotor_length_units,
             )
             for speed in plot_speeds
