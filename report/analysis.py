@@ -305,8 +305,7 @@ class Report:
             intro=(
                 """
                 ROSS - Rotordynamics Open-Source Software is a library written in Python for
-                rotordynamic analyses. It's developed by Petrobrás and Federal University of
-                Rio de Janeiro.<br>
+                rotordynamic analyses.<br>
                 It allows the construction of rotor models and their
                 numerical simulation. Shaft elements, as a default, are modeled with the
                 Timoshenko beam theory, which considers shear and rotary inertia effects,
@@ -330,10 +329,10 @@ class Report:
                 """
                 The static analysis calculates the shaft deformation, shearing forces and
                 bending moments for the rotor, given its self weight (shaft and other couplings).
-                Figure XXXX shows the free-body diagram representation, where Fd stands for Disk
+                The figure below shows the free-body diagram representation, where Fd stands for Disk
                 wieght and Fb stands for bearing reaction forces.
-                Figure XXXX shows the shaft static deformation (gyroscopic effect not included -
-                speed = 0 RPM). Figures XXXX and XXXX show the diagrams for shearing force and
+                Besides that there's the shaft static deformation (gyroscopic effect not included -
+                speed = 0 RPM), and the diagrams for shearing force and
                 bending moment respectively.
                 """
             )
@@ -350,24 +349,6 @@ class Report:
                 operation speeds.
                 """
             ),
-            min_clearance=(
-                """
-                Figure XXXX shows the Undamped Critical Speed Map under the minimum clearance
-                of the bearings.
-                """
-            ),
-            oper_clearance=(
-                """
-                Figure XXXX shows the Undamped Critical Speed Map under the rated clearance
-                of the bearings.
-                """
-            ),
-            max_clearance=(
-                """
-                Figure XXXX shows the Undamped Critical Speed Map under the maximum clearance
-                of the bearings.
-                """
-            ),
         )
 
         Damped_Critical_Speed_Map = dict(
@@ -380,24 +361,6 @@ class Report:
                 each mode, measured by the logarithm decrement, is presented with a color scale.
                 """
             ),
-            min_clearance=(
-                """
-                Figure XXXX shows the Campbell diagram under the minimum clearance of the
-                bearings.
-                """
-            ),
-            oper_clearance=(
-                """
-                Figure XXXX shows the Campbell diagram under the rated clearance of the
-                bearings.
-                """
-            ),
-            max_clearance=(
-                """
-                Figure XXXX shows the Campbell diagram under the maximum clearance of the
-                bearings.
-                """
-            ),
         )
 
         Mode_Shapes = dict(
@@ -407,24 +370,6 @@ class Report:
                 the log dec.
                 The modal analysis is performed to the rotor operation speed.
                 """
-            ),
-            min_clearance=(
-                f"""
-                    Figure XXXX shows first two mode shape of {self.tag} rotor, for the minimum
-                    clearance.
-                    """
-            ),
-            oper_clearance=(
-                f"""
-                    Figure XXXX shows first two mode shape of {self.tag} rotor, for the rated
-                    clearance.
-                    """
-            ),
-            max_clearance=(
-                f"""
-                    Figure XXXX shows first two mode shape of {self.tag} rotor, for the maximum
-                    clearance.
-                    """
             ),
         )
 
@@ -442,15 +387,15 @@ class Report:
             ),
             min_clearance=(
                 """
-                The unbalance response diagram is shown in Figure XXXX and Table XXXX show a
-                brief results summary under the minimum clearance of the bearings.
+                The unbalance response diagram is shown below and a
+                brief results summary under the rated clearance of the bearings.
                 The amplitude in all curves are calculated for the nodes and orientations for
                 each probe selected in the analysis.
                 """
             ),
             oper_clearance=(
                 """
-                The unbalance response diagram is shown in Figure XXXX and Table XXXX show a
+                The unbalance response diagram is shown below and a
                 brief results summary under the rated clearance of the bearings.
                 The amplitude in all curves are calculated for the nodes and orientations for
                 each probe selected in the analysis.
@@ -458,8 +403,8 @@ class Report:
             ),
             max_clearance=(
                 """
-                The unbalance response diagram is shown in Figure XXXX and Table XXXX show a
-                brief results summary under the maximum clearance of the bearings.
+                The unbalance response diagram is shown below and a
+                brief results summary under the rated clearance of the bearings.
                 The amplitude in all curves are calculated for the nodes and orientations for
                 each probe selected in the analysis.
                 """
@@ -535,12 +480,12 @@ class Report:
             min_clearance=(
                 """
                 The result of level I stability (plot of Applied Cross-coupled stiffness vs
-                logarithmic decrement) is shown as Figure XXXX. The plot shows the relationship
+                logarithmic decrement) is shown below. The plot shows the relationship
                 of the logarithmic decrement and Cross-coupled stiffness of rotor, \(Q_a\) is
                 anticipated cross coupling stiffness, \(Q_0\) is the amount of the applied cross
                 coupling required to produce a zero logarithmic decrement (where the curve
                 crosses the abscissa).<br>
-                Figure XXXX is a screening criteria relating the Critical Speed Ratio (CSR) and
+                The subsequent figure is a screening criteria relating the Critical Speed Ratio (CSR) and
                 the average gas density. If the screening point is located on Region B, further
                 stabiliy analysis is required.
                 """
@@ -548,12 +493,12 @@ class Report:
             oper_clearance=(
                 """
                 The result of level I stability (plot of Applied Cross-coupled stiffness vs
-                logarithmic decrement) is shown as Figure XXXX. The plot shows the relationship
+                logarithmic decrement) is shown below. The plot shows the relationship
                 of the logarithmic decrement and Cross-coupled stiffness of rotor, Qa is
                 anticipated cross coupling stiffness, Q0 is the amount of the applied cross
                 coupling required to produce a zero logarithmic decrement (where the curve
                 crosses the abscissa).<br>
-                Figure XXXX is a screening criteria relating the Critical Speed Ratio (CSR) and
+                The subsequent figure is a screening criteria relating the Critical Speed Ratio (CSR) and
                 the average gas density. If the screening point is located on Region B, further
                 stabiliy analysis is required.<br>
                 """
@@ -561,12 +506,12 @@ class Report:
             max_clearance=(
                 """
                 The result of level I stability (plot of Applied Cross-coupled stiffness vs
-                logarithmic decrement) is shown as Figure XXXX. The plot shows the relationship
+                logarithmic decrement) can be seen below. The plot shows the relationship
                 of the logarithmic decrement and Cross-coupled stiffness of rotor, Qa is
                 anticipated cross coupling stiffness, Q0 is the amount of the applied cross
                 coupling required to produce a zero logarithmic decrement (where the curve
                 crosses the abscissa).<br>
-                Figure XXXX is a screening criteria relating the Critical Speed Ratio (CSR) and
+                The subsequent figure is a screening criteria relating the Critical Speed Ratio (CSR) and
                 the average gas density. If the screening point is located on Region B, further
                 stabiliy analysis is required.<br>
                 """
@@ -584,7 +529,7 @@ class Report:
             ),
             min_clearance=(
                 """
-                The Table XXXX below shows the log decrement for several rotor configurations,
+                The Table below shows the log decrement for several rotor configurations,
                 considering each component individually and the full rotor model. Each row
                 present a configuration and the respective log decrement calculated for the
                 maximum continuous speed.<br>
@@ -592,7 +537,7 @@ class Report:
             ),
             oper_clearance=(
                 """
-                The Table XXXX below shows the log decrement for several rotor configurations,
+                The Table below shows the log decrement for several rotor configurations,
                 considering each component individually and the full rotor model. Each row
                 present a configuration and the respective log decrement calculated for the
                 maximum continuous speed.<br>
@@ -600,7 +545,7 @@ class Report:
             ),
             max_clearance=(
                 """
-                The Table XXXX below shows the log decrement for several rotor configurations,
+                The Table below shows the log decrement for several rotor configurations,
                 considering each component individually and the full rotor model. Each row
                 present a configuration and the respective log decrement calculated for the
                 maximum continuous speed.<br>
