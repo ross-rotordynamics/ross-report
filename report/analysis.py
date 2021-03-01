@@ -578,20 +578,16 @@ class Report:
         introduction = [
             Title("Introduction"),
             Text(Introduction["intro"]),
-            PlotlyFigure(rotor.plot_rotor()),
+            PlotlyFigure(rotor.plot_rotor(), legend="Rotor representation"),
         ]
 
         static_analysis = [
             Title("Static Analysis"),
             Text(Static_analysis["intro"]),
-            PlotlyFigure(results["static_analysis"][0]),
-            Text(
-                "Figure XXXX shows the free-body diagram representation, where Fd stands for Disk weight and Fb stands for bearing reaction forces.",
-                style="text-align:center",
-            ),
-            PlotlyFigure(results["static_analysis"][1]),
-            PlotlyFigure(results["static_analysis"][2]),
-            PlotlyFigure(results["static_analysis"][3]),
+            PlotlyFigure(results["static_analysis"][0], legend="Shows the free-body diagram representation, where Fd stands for Disk weight and Fb stands for bearing reaction forces"),
+            PlotlyFigure(results["static_analysis"][1], legend="Shaft static deformation (gyroscopic effect not included - speed = 0 RPM)"),
+            PlotlyFigure(results["static_analysis"][2], legend="Shearing force Diagram"),
+            PlotlyFigure(results["static_analysis"][3], legend="Bending moment Diagram"),
         ]
 
         undamped_critical_speed_map = [
@@ -625,53 +621,50 @@ class Report:
             else:
                 undamped_critical_speed_map.extend(
                     [
-                        PlotlyFigure(results[bearing]["ucs_map"]),
-                        Text(Undamped_Critical_Speed_Map[bearing]),
+                        PlotlyFigure(results[bearing]["ucs_map"], legend=f"Undamped Critical Speed Map under the {bearing} of the bearings"),
                     ]
                 )
 
                 damped_critical_speed_map.extend(
                     [
-                        PlotlyFigure(results[bearing]["dcs_map"]),
-                        Text(Damped_Critical_Speed_Map[bearing]),
+                        PlotlyFigure(results[bearing]["dcs_map"], legend=f"Campbell diagram under the {bearing} of the bearings."),
                     ]
                 )
 
                 unbalance_response.extend(
                     [
                         Text(Unbalance_Response[bearing]),
-                        PlotlyFigure(results[bearing]["unbalance_response"][0]),
-                        PlotlyFigure(results[bearing]["unbalance_response"][1]),
-                        Table(results[bearing]["unbalace_summary"][0], width=300),
+                        PlotlyFigure(results[bearing]["unbalance_response"][0], legend=f"Unbalance response diagram"),
+                        PlotlyFigure(results[bearing]["unbalance_response"][1], legend=f"Unbalance response diagram"),
+                        Table(results[bearing]["unbalace_summary"][0], width=300, legend=f"Unbalance response summary"),
                     ]
                 )
 
                 deflected_shape.extend(
                     [
-                        PlotlyFigure(results[bearing]["deflected_shape"][0][0]),
                         Text(Deflected_Shape[bearing]),
+                        PlotlyFigure(results[bearing]["deflected_shape"][0][0], legend=f"Deflected shapes for speed plot for {bearing}"),
                     ]
                 )
 
                 modal_analysis.extend(
                     [
-                        PlotlyFigure(results[bearing]["mode_shape"][0]),
-                        Text(Mode_Shapes[bearing]),
+                        PlotlyFigure(results[bearing]["mode_shape"][0], legend=f"First two mode shape of {self.rotor.tag}, for the {bearing}."),
                     ]
                 )
 
                 level_1_analysis.extend(
                     [
-                        PlotlyFigure(results[bearing]["stability_level1"][0]),
-                        PlotlyFigure(results[bearing]["stability_level1"][1]),
+                        PlotlyFigure(results[bearing]["stability_level1"][0], legend=f"Applied cross-coupled stiffness vs. Log Decrement for {bearing}"),
+                        PlotlyFigure(results[bearing]["stability_level1"][1], legend=f"CSR vs. Mean Gas Density"),
                         Text(Level_1_Analysis[bearing]),
                     ]
                 )
 
                 level_2_analysis.extend(
                     [
-                        Table(results[bearing]["stability_level2"], width=300),
                         Text(Level_2_Analysis[bearing]),
+                        Table(results[bearing]["stability_level2"], width=300),
                     ]
                 )
 
