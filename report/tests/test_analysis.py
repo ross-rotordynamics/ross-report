@@ -373,7 +373,7 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report0.log_dec_a, 0.014520423503078583, atol=1e-4)
     assert_allclose(report0.CSR, 8.847625, atol=1e-4)
     assert_allclose(report0.Qratio, 9.0, atol=1e-4)
-    assert_allclose(report0.crit_speed, 113.15518508670297, atol=1e-4)
+    assert_allclose(report0.crit_speed, 113.024683, atol=1e-4)
     assert_allclose(report0.MCS, 1000.0, atol=1e-4)
     assert_allclose(report0.rho_gas, 34.05, atol=1e-4)
     assert report0.results[report0.case]["lvl1"] is False
@@ -383,9 +383,9 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report1.Q0, 25570.065206064668, atol=1e-4)
     assert_allclose(report1.Qa, 669.69218396836, atol=1e-4)
     assert_allclose(report1.log_dec_a, 0.031775752903274904, atol=1e-6)
-    assert_allclose(report1.CSR, 9.927312211419821, atol=1e-4)
+    assert_allclose(report1.CSR, 11.141491, atol=1e-4)
     assert_allclose(report1.Qratio, 38.1818181818182, atol=1e-4)
-    assert_allclose(report1.crit_speed, 100.73220008630899, atol=1e-4)
+    assert_allclose(report1.crit_speed, 89.75459, atol=1e-4)
     assert_allclose(report1.MCS, 1000.0, atol=1e-4)
     assert_allclose(report1.rho_gas, 34.05, atol=1e-4)
     assert report1.results[report1.case]["lvl1"] is False
@@ -395,9 +395,9 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report2.Q0, 2434436.079545, atol=1e-4)
     assert_allclose(report2.Qa, 895.3125000000002, atol=1e-4)
     assert_allclose(report2.log_dec_a, 0.19275430850265318, atol=1e-4)
-    assert_allclose(report2.CSR, 11.718265284342298, atol=1e-4)
+    assert_allclose(report2.CSR, 10.814149, atol=1e-4)
     assert_allclose(report2.Qratio, 2719.0909090908012, atol=1e-4)
-    assert_allclose(report2.crit_speed, 85.34314910322335, atol=1e-4)
+    assert_allclose(report2.crit_speed, 92.478255, atol=1e-4)
     assert_allclose(report2.MCS, 9550.0, atol=1e-4)
     assert_allclose(report2.rho_gas, 34.05, atol=1e-4)
     assert report2.results[report2.case]["lvl1"] is True
