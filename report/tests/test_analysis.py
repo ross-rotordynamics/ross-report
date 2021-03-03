@@ -371,7 +371,7 @@ def test_stability_level1(report0, report1, report2):
     assert_allclose(report0.Q0, 19021.9367934373, atol=1e-4)
     assert_allclose(report0.Qa, 2113.54853260414442, atol=1e-4)
     assert_allclose(report0.log_dec_a, 0.014520423503078583, atol=1e-4)
-    assert_allclose(report0.CSR, 8.83742092096016, atol=1e-4)
+    assert_allclose(report0.CSR, 8.847625, atol=1e-4)
     assert_allclose(report0.Qratio, 9.0, atol=1e-4)
     assert_allclose(report0.crit_speed, 113.15518508670297, atol=1e-4)
     assert_allclose(report0.MCS, 1000.0, atol=1e-4)
